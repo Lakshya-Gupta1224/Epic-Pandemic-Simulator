@@ -24,6 +24,14 @@ Backend (Pure C, no GL)  →  Controller (Mediator)  →  Frontend (OpenGL/GLUT)
 - FreeGLUT development libraries
 - OpenGL & GLU
 
+### Option 1 (with make tools)
+**First you have to download make**
+```
+Install make via MSYS2 (recommended)
+Open an MSYS2 MINGW64 terminal and run:
+
+pacman -S make
+```
 ### Compile
 ```bash
 make
@@ -32,6 +40,22 @@ make
 ### Run
 ```bash
 ./pandemic_sim
+```
+### Option 2 (Compile directly from PowerShell, no make needed)
+### Compile
+```
+Run this one-liner that does the same thing as the Makefile:
+powershell 
+
+gcc -Wall -Wextra -std=c99 -Isrc -Isrc/shared -Isrc/backend -Isrc/frontend -Isrc/controller src/main.c src/backend/seir.c src/backend/timer.c src/backend/economy.c src/backend/mental_health.c src/backend/hospital.c src/backend/decisions.c src/backend/end_conditions.c src/backend/debriefing.c src/backend/simulation.c src/frontend/renderer.c src/frontend/camera.c src/frontend/city_renderer.c src/frontend/entity_renderer.c src/frontend/hud.c src/frontend/menu.c src/frontend/input.c src/controller/controller.c src/controller/world_gen.c -o pandemic_sim -lfreeglut -lopengl32 -lglu32 -lm
+```
+
+### Run
+```
+Then run:
+powershell
+
+.\pandemic_sim.exe
 ```
 
 ## Controls
