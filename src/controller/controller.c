@@ -98,14 +98,39 @@ void controller_update(float dt) {
             for (i = 0; i < world.personCount; i++) {
                 Person* p = &world.persons[i];
                 if (p->isMoving && p->moveProgress < 1.0f) {
-                    p->moveProgress += dt * 1.5f;
+                    p->moveProgress += dt * 0.5f;
                     if (p->moveProgress > 1.0f) p->moveProgress = 1.0f;
 
                     {
+                        /* P1-style Manhattan routing:
+                           Half the interpolation moves along one axis to a corner point,
+                           the other half moves along the other axis.
+                           This makes it look like they use streets/grid instead of flying diagonally. */
+                        
                         float t = smoothstep(p->moveProgress);
-                        p->position.x = p->startPosition.x + (p->targetPosition.x - p->startPosition.x) * t;
-                        p->position.y = p->startPosition.y + (p->targetPosition.y - p->startPosition.y) * t;
-                        p->position.z = p->startPosition.z + (p->targetPosition.z - p->startPosition.z) * t;
+                        int xFirst = (p->id % 2 == 0); /* randomize path style based on ID */
+
+                        float midX = xFirst ? p->targetPosition.x : p->startPosition.x;
+                        float midZ = xFirst ? p->startPosition.z : p->targetPosition.z;
+
+                        /* Also curve the Y up slightly so they "hop" while walking (optional polish) */
+                        float hop = sinf(p->moveProgress * 3.14159f * 8.0f) * 0.15f; 
+                        
+                        if (t <= 0.5f) {
+                            /* Phase 1: start to corner */
+                            float pt = t * 2.0f; /* 0 to 1 */
+                            p->position.x = p->startPosition.x + (midX - p->startPosition.x) * pt;
+                            p->position.z = p->startPosition.z + (midZ - p->startPosition.z) * pt;
+                            p->position.y = p->startPosition.y + (p->targetPosition.y - p->startPosition.y) * pt + hop;
+                        } else {
+                            /* Phase 2: corner to target */
+                            float pt = (t - 0.5f) * 2.0f; /* 0 to 1 */
+                            p->position.x = midX + (p->targetPosition.x - midX) * pt;
+                            p->position.z = midZ + (p->targetPosition.z - midZ) * pt;
+                            p->position.y = p->startPosition.y + (p->targetPosition.y - p->startPosition.y) * 1.0f + hop; 
+                            /* Fix Y to be end height in phase 2 + hop */
+                            if (p->position.y < p->targetPosition.y) p->position.y = p->targetPosition.y + hop;
+                        }
                     }
 
                     if (p->moveProgress >= 1.0f) {
@@ -290,6 +315,78 @@ void controller_key_down(unsigned char key, int x, int y) {
                 world.showHelp = !world.showHelp;
             }
 
+            /* Masks (M = increase, N = decrease) */
+            if (key == 'm' || key == 'M') {
+                sim_set_masks(&world, world.state.maskLevel + 1.0f);
+                {
+                    char msg[48];
+                    snprintf(msg, 48, "Masks: %.0f/10", world.state.maskLevel);
+                    toast_show(msg, 0.8f, 0.5f, 1.0f);
+                }
+            }
+            if (key == 'n' || key == 'N') {
+                sim_set_masks(&world, world.state.maskLevel - 1.0f);
+                {
+                    char msg[48];
+                    snprintf(msg, 48, "Masks: %.0f/10", world.state.maskLevel);
+                    toast_show(msg, 0.8f, 0.5f, 1.0f);
+                }
+            }
+
+            /* Lockdown (L = +10%, K = -10%) */
+            if (key == 'l' || key == 'L') {
+                sim_set_lockdown(&world, world.state.lockdownPercent + 10.0f);
+                {
+                    char msg[48];
+                    snprintf(msg, 48, "Lockdown: %.0f%%", world.state.lockdownPercent);
+                    toast_show(msg, 1.0f, 0.4f, 0.2f);
+                }
+            }
+            if (key == 'k' || key == 'K') {
+                sim_set_lockdown(&world, world.state.lockdownPercent - 10.0f);
+                {
+                    char msg[48];
+                    snprintf(msg, 48, "Lockdown: %.0f%%", world.state.lockdownPercent);
+                    toast_show(msg, 1.0f, 0.4f, 0.2f);
+                }
+            }
+
+            /* Infection Rate (I = +0.5, U = -0.5) */
+            if (key == 'i' || key == 'I') {
+                sim_set_infection_rate(&world, world.state.infectionRate + 0.5f);
+                {
+                    char msg[48];
+                    snprintf(msg, 48, "R0: %.1f", world.state.infectionRate);
+                    toast_show(msg, 0.9f, 0.2f, 0.2f);
+                }
+            }
+            if (key == 'u' || key == 'U') {
+                sim_set_infection_rate(&world, world.state.infectionRate - 0.5f);
+                {
+                    char msg[48];
+                    snprintf(msg, 48, "R0: %.1f", world.state.infectionRate);
+                    toast_show(msg, 0.9f, 0.2f, 0.2f);
+                }
+            }
+
+            /* Population Density (J = +0.25, , = -0.25) */
+            if (key == 'j' || key == 'J') {
+                sim_set_density(&world, world.state.populationDensity + 0.25f);
+                {
+                    char msg[48];
+                    snprintf(msg, 48, "Density: %.2fx", world.state.populationDensity);
+                    toast_show(msg, 0.3f, 0.85f, 0.6f);
+                }
+            }
+            if (key == ',') {
+                sim_set_density(&world, world.state.populationDensity - 0.25f);
+                {
+                    char msg[48];
+                    snprintf(msg, 48, "Density: %.2fx", world.state.populationDensity);
+                    toast_show(msg, 0.3f, 0.85f, 0.6f);
+                }
+            }
+
             /* Quit */
             if (key == 'q' || key == 'Q') exit(0);
             break;
@@ -314,15 +411,24 @@ void controller_key_down(unsigned char key, int x, int y) {
             break;
     }
 }
-
 void controller_mouse_click(int button, int state, int x, int y) {
     if (world.appState == APP_RUNNING || world.appState == APP_PAUSED) {
+        if (state == GLUT_DOWN) {
+            if (button == GLUT_LEFT_BUTTON && hud_handle_click(x, y, &world)) {
+                return; /* Handled by HUD */
+            }
+        } else if (state == GLUT_UP) {
+            hud_release_slider();
+        }
         input_mouse_click(button, state, x, y, &world.camera);
     }
 }
 
 void controller_mouse_drag(int x, int y) {
     if (world.appState == APP_RUNNING || world.appState == APP_PAUSED) {
+        if (hud_handle_drag(x, y, &world)) {
+            return; /* Handled by HUD */
+        }
         input_mouse_drag(x, y, &world.camera);
     }
 }

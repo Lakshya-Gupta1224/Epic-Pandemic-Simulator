@@ -7,6 +7,103 @@
 #include "end_conditions.h"
 #include "debriefing.h"
 #include "hospital.h"
+#include <stdlib.h>
+#include <math.h>
+
+/* Schedule random movement of people between buildings */
+static void schedule_movements(GameWorld* world) {
+    int i;
+    SimState* s = &world->state;
+
+    for (i = 0; i < world->personCount; i++) {
+        Person* p = &world->persons[i];
+
+        /* Don't move dead or already moving persons */
+        if (p->state == STATE_DEAD || p->isMoving) continue;
+
+        /* Infected persons should be at hospital */
+        if (p->state == STATE_INFECTED && p->currentPlace != PLACE_HOSPITAL) {
+            Building* hosp = &world->buildings[p->hospitalId];
+            p->startPosition = p->position;
+            p->targetPosition = hosp->position;
+            p->targetPosition.y = (p->type == PERSON_CHILD) ? 0.6f : 0.9f;
+            p->targetPosition.x += ((float)(rand() % 40) / 10.0f) - 2.0f;
+            p->targetPosition.z += ((float)(rand() % 40) / 10.0f) - 2.0f;
+            p->moveProgress = 0.0f;
+            p->isMoving = 1;
+            p->currentPlace = PLACE_HOSPITAL;
+            continue;
+        }
+
+        /* Lockdown: percentage of people stay home */
+        if (s->lockdownPercent > 0 && (rand() % 100) < (int)s->lockdownPercent) {
+            /* Stay home or go home if away */
+            if (p->currentPlace != PLACE_HOME) {
+                Building* home = &world->buildings[p->homeId];
+                p->startPosition = p->position;
+                p->targetPosition = home->position;
+                p->targetPosition.y = (p->type == PERSON_CHILD) ? 0.6f : 0.9f;
+                p->targetPosition.x += ((float)(rand() % 20) / 10.0f) - 1.0f;
+                p->targetPosition.z += ((float)(rand() % 20) / 10.0f) - 1.0f;
+                p->moveProgress = 0.0f;
+                p->isMoving = 1;
+                p->currentPlace = PLACE_HOME;
+            }
+            continue;
+        }
+
+        /* Random chance to move (30% per cycle) */
+        if ((rand() % 100) > 30) continue;
+
+        /* Children go to school (if open, during school hours 8-15) */
+        if (p->type == PERSON_CHILD && p->grade > 0 && p->grade <= MAX_GRADES) {
+            if (s->schoolOpen[p->grade - 1] && s->currentHour >= 8 && s->currentHour <= 15) {
+                if (p->currentPlace != PLACE_SCHOOL) {
+                    Building* sch = &world->buildings[p->workOrSchoolId];
+                    p->startPosition = p->position;
+                    p->targetPosition = sch->position;
+                    p->targetPosition.y = 0.6f;
+                    p->targetPosition.x += ((float)(rand() % 60) / 10.0f) - 3.0f;
+                    p->targetPosition.z += ((float)(rand() % 60) / 10.0f) - 3.0f;
+                    p->moveProgress = 0.0f;
+                    p->isMoving = 1;
+                    p->currentPlace = PLACE_SCHOOL;
+                }
+            } else if (p->currentPlace == PLACE_SCHOOL) {
+                /* School closed or after hours: go home */
+                Building* home = &world->buildings[p->homeId];
+                p->startPosition = p->position;
+                p->targetPosition = home->position;
+                p->targetPosition.y = 0.6f;
+                p->targetPosition.x += ((float)(rand() % 20) / 10.0f) - 1.0f;
+                p->targetPosition.z += ((float)(rand() % 20) / 10.0f) - 1.0f;
+                p->moveProgress = 0.0f;
+                p->isMoving = 1;
+                p->currentPlace = PLACE_HOME;
+            }
+        }
+
+        /* Adults wander if going out is allowed */
+        if (p->type == PERSON_ADULT && s->goingOutAllowed && p->state != STATE_INFECTED) {
+            if ((rand() % 100) < 20) {
+                /* Visit a random house in same region */
+                Region* reg = &world->regions[p->regionIndex];
+                if (reg->houseCount > 0) {
+                    int rh = rand() % reg->houseCount;
+                    Building* dest = &world->buildings[reg->houseIds[rh]];
+                    p->startPosition = p->position;
+                    p->targetPosition = dest->position;
+                    p->targetPosition.y = 0.9f;
+                    p->targetPosition.x += ((float)(rand() % 20) / 10.0f) - 1.0f;
+                    p->targetPosition.z += ((float)(rand() % 20) / 10.0f) - 1.0f;
+                    p->moveProgress = 0.0f;
+                    p->isMoving = 1;
+                    p->currentPlace = PLACE_WORK;
+                }
+            }
+        }
+    }
+}
 
 void sim_init(GameWorld* world, SimConfig config) {
     int i;
@@ -19,17 +116,53 @@ void sim_init(GameWorld* world, SimConfig config) {
     debriefing_init(&world->stats);
 
     for (i = 0; i < MAX_GRADES; i++) world->state.schoolOpen[i] = 1;
-    world->state.goingOutAllowed = 1;
-    world->state.sportsAllowed   = 1;
-    world->state.handSanitization = 0.0f;
-    world->state.endCondition    = END_NONE;
-    world->state.timeScale       = 1.0f;
+    world->state.goingOutAllowed    = 1;
+    world->state.sportsAllowed      = 1;
+    world->state.handSanitization   = 0.0f;
+    world->state.maskLevel          = 0.0f;
+    world->state.lockdownPercent    = 0.0f;
+    world->state.populationDensity  = 1.0f;
+    world->state.infectionRate      = config.R0;
+    world->state.movementTimer      = 0.0f;
+    world->state.endCondition       = END_NONE;
+    world->state.timeScale          = 1.0f;
+}
+
+static void update_vehicles(GameWorld* world, float dt) {
+    for (int v = 0; v < world->vehicleCount; v++) {
+        Vehicle* veh = &world->vehicles[v];
+        float dx = veh->targetPos.x - veh->startPos.x;
+        float dz = veh->targetPos.z - veh->startPos.z;
+        float dist = sqrtf(dx*dx + dz*dz);
+        if (dist < 1.0f) dist = 1.0f;
+
+        veh->progress += (veh->speed * dt * world->state.timeScale) / dist;
+
+        if (veh->progress >= 1.0f) {
+            veh->startPos = veh->targetPos;
+            int rNext = rand() % world->regionCount;
+            veh->targetPos = world->regions[rNext].center;
+            veh->progress = 0.0f;
+        }
+
+        veh->position.x = veh->startPos.x + (veh->targetPos.x - veh->startPos.x) * veh->progress;
+        veh->position.z = veh->startPos.z + (veh->targetPos.z - veh->startPos.z) * veh->progress;
+    }
 }
 
 int sim_update(GameWorld* world, float deltaTime) {
     if (world->state.endCondition != END_NONE) return 0;
 
     int flags = timer_update(&world->state, deltaTime);
+
+    /* Schedule movements every 2 seconds of game time */
+    world->state.movementTimer += deltaTime * world->state.timeScale;
+    if (world->state.movementTimer >= 2.0f) {
+        world->state.movementTimer -= 2.0f;
+        schedule_movements(world);
+    }
+    
+    update_vehicles(world, deltaTime);
 
     if (flags & 2) {  /* DAY_PASSED */
         seir_step(&world->state, &world->config);
@@ -68,6 +201,22 @@ void sim_toggle_sports(GameWorld* world, int allowed) {
 
 void sim_set_hand_sanitization(GameWorld* world, float level) {
     decision_set_sanitization(&world->state, level, 10.0f);
+}
+
+void sim_set_masks(GameWorld* world, float level) {
+    decision_set_masks(&world->state, level);
+}
+
+void sim_set_lockdown(GameWorld* world, float percent) {
+    decision_set_lockdown(&world->state, percent);
+}
+
+void sim_set_density(GameWorld* world, float density) {
+    decision_set_density(&world->state, density);
+}
+
+void sim_set_infection_rate(GameWorld* world, float rate) {
+    decision_set_infection_rate(&world->state, rate, &world->config);
 }
 
 void sim_set_time_scale(GameWorld* world, float scale) {

@@ -3,27 +3,15 @@
 #include <string.h>
 #include <math.h>
 
-/* 5-region map layout (inspired by P2's Denmark regions) */
-static const float regCenters[5][3] = {
-    { -120.0f, 0.0f, -100.0f },   /* North */
-    {   10.0f, 0.0f,  -30.0f },   /* Central */
-    { -120.0f, 0.0f,   80.0f },   /* South */
-    {   60.0f, 0.0f,   90.0f },   /* East */
-    {  160.0f, 0.0f,  -10.0f },   /* Capital */
-};
-static const float regSizes[5][3] = {
-    { 110.0f, 1.0f,  90.0f },
-    { 120.0f, 1.0f, 100.0f },
-    { 110.0f, 1.0f,  80.0f },
-    { 100.0f, 1.0f,  90.0f },
-    {  80.0f, 1.0f,  70.0f },
-};
-static const char* regNames[5] = {
-    "North", "Central", "South", "East", "Capital"
+static const char* regNames[9] = {
+    "North-West", "North", "North-East",
+    "West", "Central", "East",
+    "South-West", "South", "South-East"
 };
 
 static float randf(float lo, float hi) {
-    return lo + (float)rand() / (float)RAND_MAX * (hi - lo);
+    float r = (float)rand() / (float)RAND_MAX;
+    return lo + r * (hi - lo);
 }
 
 void world_generate(GameWorld* world) {
@@ -35,17 +23,19 @@ void world_generate(GameWorld* world) {
 
     for (r = 0; r < NUM_REGIONS; r++) {
         Region* reg = &world->regions[r];
+        int gx = r % 3;
+        int gz = r / 3;
         float halfW, halfD;
 
         reg->id = r;
         strncpy(reg->name, regNames[r], 31);
         reg->name[31] = '\0';
-        reg->center.x = regCenters[r][0];
-        reg->center.y = regCenters[r][1];
-        reg->center.z = regCenters[r][2];
-        reg->size.x = regSizes[r][0];
-        reg->size.y = regSizes[r][1];
-        reg->size.z = regSizes[r][2];
+        reg->center.x = (gx - 1) * 220.0f;
+        reg->center.y = 0.0f;
+        reg->center.z = (gz - 1) * 220.0f;
+        reg->size.x = 140.0f + randf(-20.0f, 20.0f);
+        reg->size.y = 1.0f;
+        reg->size.z = 140.0f + randf(-20.0f, 20.0f);
         reg->houseCount = 0;
 
         halfW = reg->size.x * 0.5f;
@@ -170,5 +160,31 @@ void world_generate(GameWorld* world) {
                 toExpose--;
             }
         }
+    }
+
+    /* Map configuration to actual simulation entities created */
+    world->config.population = (float)world->personCount;
+
+    /* Initialize Vehicles for road travel between regions */
+    world->vehicleCount = 40;  
+    for (int v = 0; v < world->vehicleCount; v++) {
+        Vehicle* veh = &world->vehicles[v];
+        int rStart = rand() % NUM_REGIONS;
+        int rEnd = rand() % NUM_REGIONS;
+        while (rEnd == rStart && NUM_REGIONS > 1) rEnd = rand() % NUM_REGIONS;
+
+        veh->startPos = world->regions[rStart].center;
+        veh->targetPos = world->regions[rEnd].center;
+        
+        veh->progress = (rand() % 100) / 100.0f;
+        veh->position.x = veh->startPos.x + (veh->targetPos.x - veh->startPos.x) * veh->progress;
+        veh->position.y = 0.5f; 
+        veh->position.z = veh->startPos.z + (veh->targetPos.z - veh->startPos.z) * veh->progress;
+        
+        veh->speed = 50.0f + (rand() % 30); 
+        
+        veh->r = 0.2f + (rand() % 80) / 100.0f;
+        veh->g = 0.2f + (rand() % 80) / 100.0f;
+        veh->b = 0.2f + (rand() % 80) / 100.0f;
     }
 }

@@ -3,6 +3,7 @@
 
 #include "models.h"
 
+void city_renderer_init(void);
 void draw_city(const GameWorld* world);
 
 #endif

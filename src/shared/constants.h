@@ -3,8 +3,8 @@
 
 /* ─── World Limits ─── */
 #define MAX_PERSONS     8192
-#define MAX_BUILDINGS   1024
-#define MAX_REGIONS     8
+#define MAX_BUILDINGS   2048
+#define MAX_REGIONS     12
 #define MAX_HISTORY     256
 #define MAX_GRADES      12
 #define MAX_RESIDENTS   16
@@ -12,19 +12,19 @@
 #define TOAST_DURATION  3.0f
 
 /* ─── Default Simulation Config ─── */
-#define DEFAULT_POPULATION        500.0f
+#define DEFAULT_POPULATION        3000
 #define DEFAULT_INCUBATION        5.0f
-#define DEFAULT_INFECTION_PERIOD  2.0f
-#define DEFAULT_R0                3.5f
-#define DEFAULT_INITIAL_EXPOSED   20.0f
-#define DEFAULT_MAX_DAYS          100
-#define DEFAULT_HOSPITAL_BEDS     10
-#define DEFAULT_MAX_ECONOMY       200
+#define DEFAULT_INFECTION_PERIOD  10.0f
+#define DEFAULT_R0                2.5f
+#define DEFAULT_INITIAL_EXPOSED   30
+#define DEFAULT_MAX_DAYS          365
+#define DEFAULT_HOSPITAL_BEDS     800
+#define DEFAULT_MAX_ECONOMY       50000
 #define DEFAULT_MAX_MENTAL_HEALTH 100.0f
 
 /* ─── Region Layout ─── */
-#define NUM_REGIONS             5
-#define HOUSES_PER_REGION       50
+#define NUM_REGIONS             9
+#define HOUSES_PER_REGION       60
 #define PERSONS_PER_HOUSE       2       /* 1 child + 1 adult */
 
 /* ─── Window ─── */

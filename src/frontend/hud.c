@@ -6,7 +6,72 @@
 
 static int screenW = 1280, screenH = 720;
 
+#define NUM_SLIDERS 5
+static float sliderRects[NUM_SLIDERS][4];
+static float sliderMin[NUM_SLIDERS];
+static float sliderMax[NUM_SLIDERS];
+static int   activeSlider = -1;
+
 void hud_set_screen(int w, int h) { screenW = w; screenH = h; }
+
+static float slider_value_from_mouse(int idx, int mouseX) {
+    float sx = sliderRects[idx][0];
+    float sw = sliderRects[idx][2];
+    float t = ((float)mouseX - sx) / sw;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    return sliderMin[idx] + t * (sliderMax[idx] - sliderMin[idx]);
+}
+
+static void apply_slider_value(int idx, float val, GameWorld* world) {
+    switch (idx) {
+        case 0: world->state.handSanitization = val; break;
+        case 1: world->state.maskLevel = val; break;
+        case 2: world->state.lockdownPercent = val; break;
+        case 3: 
+            world->state.infectionRate = val; 
+            world->config.R0 = val;
+            if (world->state.gamma > 0.0f) 
+                world->state.beta = val * world->state.gamma;
+            break;
+        case 4: world->state.populationDensity = val; break;
+    }
+}
+
+int hud_handle_click(int mouseX, int mouseY, GameWorld* world) {
+    int i;
+    int glY = screenH - mouseY;
+
+    for (i = 0; i < NUM_SLIDERS; i++) {
+        float sx = sliderRects[i][0];
+        float sy = sliderRects[i][1];
+        float sw = sliderRects[i][2];
+        float sh = sliderRects[i][3];
+
+        if ((float)mouseX >= sx - 5 && (float)mouseX <= sx + sw + 5 &&
+            (float)glY >= sy - 5 && (float)glY <= sy + sh + 5) {
+            activeSlider = i;
+            float val = slider_value_from_mouse(i, mouseX);
+            apply_slider_value(i, val, world);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int hud_handle_drag(int mouseX, int mouseY, GameWorld* world) {
+    (void)mouseY;
+    if (activeSlider >= 0 && activeSlider < NUM_SLIDERS) {
+        float val = slider_value_from_mouse(activeSlider, mouseX);
+        apply_slider_value(activeSlider, val, world);
+        return 1;
+    }
+    return 0;
+}
+
+void hud_release_slider(void) {
+    activeSlider = -1;
+}
 
 static void enter_2d(void) {
     glMatrixMode(GL_PROJECTION);
@@ -90,7 +155,7 @@ static void hud_draw_bar(float x, float y, float w, float h,
 }
 
 static void hud_draw_graph(float x, float y, float w, float h,
-                           const SimState* st, float population, int maxBeds) {
+                           const SimState* st, float population, int maxBeds, int maxDays) {
     int i;
     float maxPop, xScale, hospY;
 
@@ -112,7 +177,9 @@ static void hud_draw_graph(float x, float y, float w, float h,
 
     maxPop = population;
     if (maxPop < 1) maxPop = 1;
-    xScale = w / (float)(st->historyCount - 1);
+    
+    /* Lock the X scale to maxDays so the graph draws incrementally */
+    xScale = w / (float)(maxDays > 1 ? maxDays : 1);
 
     /* Grid lines */
     glColor4f(0.12f, 0.12f, 0.15f, 0.5f);
@@ -254,12 +321,12 @@ void render_hud(const GameWorld* world) {
 
     /* ─── SEIR Graph (bottom-left) ─── */
     hud_draw_graph(15, 15, 380, 180, s,
-                   world->config.population, world->config.maxHospitalBeds);
+                   world->config.population, world->config.maxHospitalBeds, world->config.maxDays);
 
     /* ─── Decision Panel (right side, with panel background) ─── */
     {
         float panelW = 220;
-        float panelH = 380;
+        float panelH = 590;
         float px = (float)screenW - panelW - 10;
         float panelTop = (float)screenH - 105;
         float py = panelTop;
@@ -336,9 +403,69 @@ void render_hud(const GameWorld* world) {
                       GLUT_BITMAP_HELVETICA_12);
         py -= 18;
 
-        snprintf(buf, 64, "[+/-] Sanitize: %.0f / 10", s->handSanitization);
-        hud_draw_text(px, py, buf, white, GLUT_BITMAP_HELVETICA_12);
-        py -= 22;
+        py -= 10;
+
+        /* ── Interactive Sliders ── */
+        {
+            Color4f lblC = {0.6f, 0.6f, 0.7f, 1.0f};
+            hud_draw_text(px, py, "SLIDERS (click & drag)", lblC, GLUT_BITMAP_HELVETICA_10);
+        }
+        py -= 14;
+
+#define DRAW_SLIDER(idx, label, val, minV, maxV, cr, cg, cb) \
+        do { \
+            float slW = panelW - 10, slH = 14; \
+            float fill = ((val) - (minV)) / ((maxV) - (minV)); \
+            float knobX; \
+            if (fill < 0) fill = 0; \
+            if (fill > 1) fill = 1; \
+            snprintf(buf, 64, "%s: %.1f", label, (float)(val)); \
+            hud_draw_text(px, py, buf, white, GLUT_BITMAP_HELVETICA_10); \
+            py -= 15; \
+            sliderRects[idx][0] = px; sliderRects[idx][1] = py; \
+            sliderRects[idx][2] = slW; sliderRects[idx][3] = slH; \
+            sliderMin[idx] = (minV); sliderMax[idx] = (maxV); \
+            glColor4f(0.10f, 0.10f, 0.13f, 0.8f); \
+            glBegin(GL_QUADS); \
+            glVertex2f(px, py); glVertex2f(px+slW, py); \
+            glVertex2f(px+slW, py+slH); glVertex2f(px, py+slH); \
+            glEnd(); \
+            glColor4f(0.25f, 0.25f, 0.30f, 0.7f); \
+            glBegin(GL_LINE_LOOP); \
+            glVertex2f(px, py); glVertex2f(px+slW, py); \
+            glVertex2f(px+slW, py+slH); glVertex2f(px, py+slH); \
+            glEnd(); \
+            glBegin(GL_QUADS); \
+            glColor4f((cr)*0.4f, (cg)*0.4f, (cb)*0.4f, 0.7f); \
+            glVertex2f(px, py); glVertex2f(px + slW * fill, py); \
+            glColor4f(cr, cg, cb, 0.9f); \
+            glVertex2f(px + slW * fill, py + slH); glVertex2f(px, py + slH); \
+            glEnd(); \
+            knobX = px + slW * fill; \
+            glColor4f(0.95f, 0.95f, 0.98f, 1.0f); \
+            glBegin(GL_QUADS); \
+            glVertex2f(knobX - 3, py - 1); glVertex2f(knobX + 3, py - 1); \
+            glVertex2f(knobX + 3, py + slH + 1); glVertex2f(knobX - 3, py + slH + 1); \
+            glEnd(); \
+            if (activeSlider == idx) { \
+                glColor4f(0.4f, 0.8f, 1.0f, 0.9f); \
+                glLineWidth(2.0f); \
+                glBegin(GL_LINE_LOOP); \
+                glVertex2f(px-1, py-1); glVertex2f(px+slW+1, py-1); \
+                glVertex2f(px+slW+1, py+slH+1); glVertex2f(px-1, py+slH+1); \
+                glEnd(); \
+                glLineWidth(1.0f); \
+            } \
+            py -= 20; \
+        } while(0)
+
+        DRAW_SLIDER(0, "Sanitize", s->handSanitization, 0.0f, 10.0f, 0.3f, 0.6f, 1.0f);
+        DRAW_SLIDER(1, "Masks",    s->maskLevel,         0.0f, 10.0f, 0.8f, 0.5f, 1.0f);
+        DRAW_SLIDER(2, "Lockdown", s->lockdownPercent,   0.0f, 100.0f, 1.0f, 0.4f, 0.2f);
+        DRAW_SLIDER(3, "Infectn Rate", s->infectionRate, 0.5f, 5.0f,  0.9f, 0.2f, 0.2f);
+        DRAW_SLIDER(4, "Density",  s->populationDensity, 0.5f, 3.0f,  0.3f, 0.85f, 0.6f);
+
+#undef DRAW_SLIDER
 
         /* Separator */
         glColor4f(0.3f, 0.3f, 0.4f, 0.3f);

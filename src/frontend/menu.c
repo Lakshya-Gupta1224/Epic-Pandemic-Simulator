@@ -33,76 +33,133 @@ void render_menu(float gameTime) {
     glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity();
     glDisable(GL_DEPTH_TEST); glDisable(GL_LIGHTING);
 
-    /* Gradient background */
+    /* Dark slate blue gradient background */
     glBegin(GL_QUADS);
-    glColor3f(0.04f, 0.04f, 0.08f); glVertex2f(0, 0); glVertex2f((float)w, 0);
-    glColor3f(0.08f, 0.06f, 0.14f); glVertex2f((float)w, (float)h); glVertex2f(0, (float)h);
+    glColor3f(0.04f, 0.05f, 0.08f); glVertex2f(0, 0); glVertex2f((float)w, 0);
+    glColor3f(0.08f, 0.10f, 0.14f); glVertex2f((float)w, (float)h); glVertex2f(0, (float)h);
     glEnd();
 
-    /* Animated decorative circles */
+    /* Animated Network Background (Modern / Sleek) */
     glEnable(GL_BLEND);
-    for (i = 0; i < 10; i++) {
-        float cx = w * 0.08f + i * w * 0.09f;
-        float cy = h * 0.35f + sinf(gameTime * 0.4f + i * 0.8f) * 50.0f;
-        float radius = 18.0f + sinf(gameTime * 0.6f + i) * 8.0f;
-        float alpha = 0.04f + 0.02f * sinf(gameTime * 0.7f + i);
+    glLineWidth(1.0f);
+    glBegin(GL_LINES);
+    for (i = 0; i < 20; i++) {
+        float cx1 = w * (0.1f + 0.8f * sinf(i * 1.3f + gameTime * 0.1f));
+        float cy1 = h * (0.1f + 0.8f * cosf(i * 0.7f + gameTime * 0.15f));
         int j;
-
-        if (i < 3) glColor4f(0.94f, 0.14f, 0.24f, alpha);
-        else if (i < 6) glColor4f(1.0f, 0.64f, 0.0f, alpha);
-        else glColor4f(0.05f, 0.68f, 0.38f, alpha);
-
-        glBegin(GL_TRIANGLE_FAN);
-        glVertex2f(cx, cy);
-        for (j = 0; j <= 24; j++) {
-            float angle = j * 2.0f * (float)M_PI / 24.0f;
-            glVertex2f(cx + cosf(angle) * radius, cy + sinf(angle) * radius);
+        for (j = i + 1; j < 20; j++) {
+            float cx2 = w * (0.1f + 0.8f * sinf(j * 1.3f + gameTime * 0.1f));
+            float cy2 = h * (0.1f + 0.8f * cosf(j * 0.7f + gameTime * 0.15f));
+            float dist = sqrtf((cx2-cx1)*(cx2-cx1) + (cy2-cy1)*(cy2-cy1));
+            if (dist < 250.0f) {
+                float alpha = 1.0f - (dist / 250.0f);
+                if (alpha > 0.4f) alpha = 0.4f;
+                glColor4f(0.3f, 0.5f, 0.8f, alpha * 0.5f);
+                glVertex2f(cx1, cy1);
+                glVertex2f(cx2, cy2);
+            }
         }
+    }
+    glEnd();
+
+    /* Nodes on the network */
+    glPointSize(3.0f);
+    glBegin(GL_POINTS);
+    for (i = 0; i < 20; i++) {
+        float cx1 = w * (0.1f + 0.8f * sinf(i * 1.3f + gameTime * 0.1f));
+        float cy1 = h * (0.1f + 0.8f * cosf(i * 0.7f + gameTime * 0.15f));
+        float r = 0.3f, g = 0.5f, b = 0.8f;
+        if (i % 3 == 0) { r = 0.9f; g = 0.2f; b = 0.3f; } /* Occasional infected node */
+        glColor4f(r, g, b, 0.8f);
+        glVertex2f(cx1, cy1);
+    }
+    glEnd();
+    glPointSize(1.0f);
+
+    /* Decorative glass panel behind title */
+    titleY = h * 0.70f;
+    {
+        float pWidth = 600, pHeight = 250;
+        float px = (w - pWidth) / 2.0f;
+        float py = titleY - 140;
+
+        glColor4f(0.06f, 0.08f, 0.12f, 0.7f);
+        glBegin(GL_QUADS);
+        glVertex2f(px, py); glVertex2f(px+pWidth, py);
+        glVertex2f(px+pWidth, py+pHeight); glVertex2f(px, py+pHeight);
+        glEnd();
+
+        /* Sleek borders */
+        glColor4f(0.3f, 0.5f, 0.8f, 0.3f);
+        glBegin(GL_LINE_LOOP);
+        glVertex2f(px, py); glVertex2f(px+pWidth, py);
+        glVertex2f(px+pWidth, py+pHeight); glVertex2f(px, py+pHeight);
+        glEnd();
+
+        /* Left/Right accentbars */
+        glColor4f(0.3f, 0.7f, 1.0f, 0.8f);
+        glBegin(GL_QUADS);
+        glVertex2f(px, py); glVertex2f(px+4, py);
+        glVertex2f(px+4, py+pHeight); glVertex2f(px, py+pHeight);
+        glEnd();
+        glColor4f(1.0f, 0.3f, 0.3f, 0.8f);
+        glBegin(GL_QUADS);
+        glVertex2f(px+pWidth-4, py); glVertex2f(px+pWidth, py);
+        glVertex2f(px+pWidth, py+pHeight); glVertex2f(px+pWidth-4, py+pHeight);
         glEnd();
     }
 
     /* Title */
-    titleY = h * 0.72f;
-    glColor3f(0.95f, 0.95f, 0.97f);
-    draw_centered_text(titleY, "EPIDEMIC CHOICES", GLUT_BITMAP_TIMES_ROMAN_24);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    draw_centered_text(titleY, "E P I D E M I C   C H O I C E S", GLUT_BITMAP_TIMES_ROMAN_24);
 
-    glColor3f(0.55f, 0.55f, 0.65f);
-    draw_centered_text(titleY - 32, "Pandemic Simulation", GLUT_BITMAP_HELVETICA_18);
-
-    /* Separator */
-    glColor4f(0.35f, 0.35f, 0.45f, 0.8f);
-    glBegin(GL_LINES);
-    glVertex2f(w * 0.3f, titleY - 52); glVertex2f(w * 0.7f, titleY - 52);
-    glEnd();
+    glColor3f(0.5f, 0.6f, 0.8f);
+    draw_centered_text(titleY - 30, "A Modern SEIR Simulation", GLUT_BITMAP_HELVETICA_18);
 
     /* Description */
-    glColor3f(0.45f, 0.45f, 0.55f);
-    draw_centered_text(titleY - 75, "Manage a pandemic using the SEIR model.", GLUT_BITMAP_HELVETICA_12);
-    draw_centered_text(titleY - 92, "Balance infection control, economy, and mental health.", GLUT_BITMAP_HELVETICA_12);
+    glColor3f(0.7f, 0.7f, 0.7f);
+    draw_centered_text(titleY - 80, "Manage an outbreak across 5 connected regions.", GLUT_BITMAP_HELVETICA_12);
+    draw_centered_text(titleY - 100, "Balance public health, economic stability, and mental wellbeing.", GLUT_BITMAP_HELVETICA_12);
 
-    /* Start prompt (pulsing) */
-    pulse = 0.55f + 0.45f * sinf(gameTime * 3.0f);
-    glColor4f(0.3f, 0.9f, 0.4f, pulse);
-    draw_centered_text(h * 0.42f, "Press ENTER to Start", GLUT_BITMAP_HELVETICA_18);
+    /* Start prompt (pulsing, highly visible) */
+    pulse = 0.6f + 0.4f * sinf(gameTime * 4.0f);
+    {
+        float btnW = 300, btnH = 50;
+        float bx = (w - btnW) / 2.0f;
+        float by = h * 0.35f;
+
+        /* Glowing button backdrop */
+        glColor4f(0.2f, 0.8f, 0.4f, pulse * 0.3f);
+        glBegin(GL_QUADS);
+        glVertex2f(bx - 10, by - 10); glVertex2f(bx+btnW + 10, by - 10);
+        glVertex2f(bx+btnW + 10, by+btnH + 10); glVertex2f(bx - 10, by+btnH + 10);
+        glEnd();
+
+        /* Button border */
+        glColor4f(0.2f, 0.9f, 0.4f, pulse);
+        glBegin(GL_LINE_LOOP);
+        glVertex2f(bx, by); glVertex2f(bx+btnW, by);
+        glVertex2f(bx+btnW, by+btnH); glVertex2f(bx, by+btnH);
+        glEnd();
+
+        glColor4f(0.9f, 1.0f, 0.9f, pulse);
+        draw_centered_text(by + 18, "P R E S S   E N T E R   T O   S T A R T", GLUT_BITMAP_HELVETICA_12);
+    }
 
     glColor3f(0.4f, 0.4f, 0.5f);
-    draw_centered_text(h * 0.38f, "Press Q to Quit", GLUT_BITMAP_HELVETICA_12);
+    draw_centered_text(h * 0.28f, "Press Q to Quit", GLUT_BITMAP_HELVETICA_12);
 
     /* Controls reference */
     {
-        float ctrlY = h * 0.28f;
+        float ctrlY = h * 0.15f;
         const char* controls[] = {
-            "-- In-Game Controls --",
-            "1-0,-,= : Toggle school grades   |   G : Going out   |   S : Sports",
-            "+/- : Sanitization   |   P/ESC : Pause   |   [/] : Speed   |   F : Skip",
-            "Mouse Drag : Rotate   |   Right Drag : Pan   |   Scroll : Zoom",
+            "CONTROLS: Drag Mouse: Rotate/Pan | Scroll: Zoom | S/G: Restrictions | +/-/M/N/L/K: Sliders",
             NULL
         };
         int ci;
-        glColor3f(0.38f, 0.38f, 0.48f);
+        glColor3f(0.4f, 0.5f, 0.6f);
         for (ci = 0; controls[ci]; ci++) {
-            draw_centered_text(ctrlY, controls[ci],
-                               ci == 0 ? GLUT_BITMAP_HELVETICA_12 : GLUT_BITMAP_HELVETICA_10);
+            draw_centered_text(ctrlY, controls[ci], GLUT_BITMAP_HELVETICA_10);
             ctrlY -= 16;
         }
     }

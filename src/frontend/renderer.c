@@ -2,6 +2,7 @@
 #include "city_renderer.h"
 #include "entity_renderer.h"
 #include <GL/glut.h>
+#include <math.h>
 
 static int winW, winH;
 
@@ -68,7 +69,47 @@ void render_resize(int w, int h) {
     glMatrixMode(GL_MODELVIEW);
 }
 
+static void draw_sun_and_moon(const GameWorld* world) {
+    float hourNorm = world->state.currentHour / 24.0f;
+    /* Angle: 12 noon = top (90 deg), 0 midnight = bottom (-90 deg) */
+    float angle = (hourNorm * 2.0f * 3.14159f) - 1.5708f; /* shift by 90 degrees */
+    float radius = 900.0f;
+
+    float sx = cosf(angle) * radius;
+    float sy = sinf(angle) * radius;
+    float mx = cosf(angle + 3.14159f) * radius;
+    float my = sinf(angle + 3.14159f) * radius;
+
+    glDisable(GL_LIGHTING);
+
+    /* Draw Sun */
+    if (sy > -100.0f) {
+        glPushMatrix();
+        glTranslatef(sx, sy, -400.0f);
+        glColor3f(1.0f, 0.95f, 0.7f);
+        glutSolidSphere(60.0f, 24, 24);
+        /* Sun Glow */
+        glEnable(GL_BLEND);
+        glColor4f(1.0f, 0.8f, 0.2f, 0.3f);
+        glutSolidSphere(85.0f, 16, 16);
+        glDisable(GL_BLEND);
+        glPopMatrix();
+    }
+
+    /* Draw Moon */
+    if (my > -100.0f) {
+        glPushMatrix();
+        glTranslatef(mx, my, -400.0f);
+        glColor3f(0.8f, 0.85f, 0.95f);
+        glutSolidSphere(40.0f, 16, 16);
+        glPopMatrix();
+    }
+
+    glEnable(GL_LIGHTING);
+}
+
 void render_scene(const GameWorld* world) {
+    draw_sun_and_moon(world);
     draw_city(world);
     draw_entities(world);
 }

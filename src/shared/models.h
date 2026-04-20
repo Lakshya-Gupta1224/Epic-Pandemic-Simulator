@@ -62,6 +62,15 @@ typedef struct {
 } Color4f;
 
 typedef struct {
+    Vec3  position;
+    Vec3  startPos;
+    Vec3  targetPos;
+    float progress;
+    float speed;
+    float r, g, b;
+} Vehicle;
+
+typedef struct {
     int          id;
     BuildingType type;
     Vec3         position;
@@ -153,6 +162,13 @@ typedef struct {
     int   goingOutAllowed;
     int   sportsAllowed;
     float handSanitization;
+    float maskLevel;            /* 0.0 - 10.0 */
+    float lockdownPercent;      /* 0.0 - 100.0 */
+    float populationDensity;    /* 0.5 - 3.0 multiplier */
+    float infectionRate;        /* 0.5 - 5.0  (R0 override) */
+
+    /* Movement scheduling */
+    float movementTimer;
 
     /* End state */
     EndCondition endCondition;
@@ -209,6 +225,8 @@ typedef struct {
     int         buildingCount;
     Region      regions[MAX_REGIONS];
     int         regionCount;
+    Vehicle     vehicles[100];
+    int         vehicleCount;
     SimConfig   config;
     SimState    state;
     DebriefingStats stats;
