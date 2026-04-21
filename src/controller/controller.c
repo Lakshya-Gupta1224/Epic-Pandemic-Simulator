@@ -62,6 +62,33 @@ void controller_init(int w, int h) {
     world.showHelp = 0;
 }
 
+/* ─── Road Snapping Helpers ─── */
+static float get_nearest_road_x(const Region* reg, float x) {
+    float hx = reg->size.x * 0.5f;
+    float step = reg->size.x / 5.0f;
+    float best_road = reg->center.x;
+    float min_dist = 9999.0f;
+    for (int i = 1; i < 5; i++) {
+        float r_x = reg->center.x - hx + step * i;
+        float dist = fabsf(x - r_x);
+        if (dist < min_dist) { min_dist = dist; best_road = r_x; }
+    }
+    return best_road;
+}
+
+static float get_nearest_road_z(const Region* reg, float z) {
+    float hz = reg->size.z * 0.5f;
+    float step = reg->size.z / 5.0f;
+    float best_road = reg->center.z;
+    float min_dist = 9999.0f;
+    for (int i = 1; i < 5; i++) {
+        float r_z = reg->center.z - hz + step * i;
+        float dist = fabsf(z - r_z);
+        if (dist < min_dist) { min_dist = dist; best_road = r_z; }
+    }
+    return best_road;
+}
+
 /* ═══════════════════════════════════════════
    UPDATE
    ═══════════════════════════════════════════ */
@@ -102,34 +129,58 @@ void controller_update(float dt) {
                     if (p->moveProgress > 1.0f) p->moveProgress = 1.0f;
 
                     {
-                        /* P1-style Manhattan routing:
-                           Half the interpolation moves along one axis to a corner point,
-                           the other half moves along the other axis.
-                           This makes it look like they use streets/grid instead of flying diagonally. */
-                        
                         float t = smoothstep(p->moveProgress);
-                        int xFirst = (p->id % 2 == 0); /* randomize path style based on ID */
-
-                        float midX = xFirst ? p->targetPosition.x : p->startPosition.x;
-                        float midZ = xFirst ? p->startPosition.z : p->targetPosition.z;
-
-                        /* Also curve the Y up slightly so they "hop" while walking (optional polish) */
-                        float hop = sinf(p->moveProgress * 3.14159f * 8.0f) * 0.15f; 
+                        Region* reg = &world.regions[p->regionIndex];
+                        int xFirst = (p->id % 2 == 0);
                         
-                        if (t <= 0.5f) {
-                            /* Phase 1: start to corner */
-                            float pt = t * 2.0f; /* 0 to 1 */
-                            p->position.x = p->startPosition.x + (midX - p->startPosition.x) * pt;
-                            p->position.z = p->startPosition.z + (midZ - p->startPosition.z) * pt;
-                            p->position.y = p->startPosition.y + (p->targetPosition.y - p->startPosition.y) * pt + hop;
+                        Vec3 p0 = p->startPosition;
+                        Vec3 p4 = p->targetPosition;
+                        Vec3 p1 = p0, p3 = p4, p2;
+
+                        if (xFirst) {
+                            p1.z = get_nearest_road_z(reg, p0.z);
+                            p3.x = get_nearest_road_x(reg, p4.x);
+                            p2.x = p3.x; p2.y = p0.y; p2.z = p1.z;
                         } else {
-                            /* Phase 2: corner to target */
-                            float pt = (t - 0.5f) * 2.0f; /* 0 to 1 */
-                            p->position.x = midX + (p->targetPosition.x - midX) * pt;
-                            p->position.z = midZ + (p->targetPosition.z - midZ) * pt;
-                            p->position.y = p->startPosition.y + (p->targetPosition.y - p->startPosition.y) * 1.0f + hop; 
-                            /* Fix Y to be end height in phase 2 + hop */
-                            if (p->position.y < p->targetPosition.y) p->position.y = p->targetPosition.y + hop;
+                            p1.x = get_nearest_road_x(reg, p0.x);
+                            p3.z = get_nearest_road_z(reg, p4.z);
+                            p2.x = p1.x; p2.y = p0.y; p2.z = p3.z;
+                        }
+
+                        float d1 = fabsf(p1.x - p0.x) + fabsf(p1.z - p0.z);
+                        float d2 = fabsf(p2.x - p1.x) + fabsf(p2.z - p1.z);
+                        float d3 = fabsf(p3.x - p2.x) + fabsf(p3.z - p2.z);
+                        float d4 = fabsf(p4.x - p3.x) + fabsf(p4.z - p3.z);
+                        float total_d = d1 + d2 + d3 + d4;
+                        if (total_d < 0.001f) total_d = 1.0f;
+
+                        float t1 = d1 / total_d;
+                        float t2 = t1 + d2 / total_d;
+                        float t3 = t2 + d3 / total_d;
+
+                        float hop = sinf(p->moveProgress * 3.14159f * 8.0f) * 0.15f; 
+                        float cur_y = p0.y + (p4.y - p0.y) * t + hop;
+
+                        if (t <= t1) {
+                            float pt = (t1 > 0) ? (t / t1) : 1.0f;
+                            p->position.x = p0.x + (p1.x - p0.x) * pt;
+                            p->position.z = p0.z + (p1.z - p0.z) * pt;
+                            p->position.y = cur_y;
+                        } else if (t <= t2) {
+                            float pt = (t2 > t1) ? ((t - t1) / (t2 - t1)) : 1.0f;
+                            p->position.x = p1.x + (p2.x - p1.x) * pt;
+                            p->position.z = p1.z + (p2.z - p1.z) * pt;
+                            p->position.y = cur_y;
+                        } else if (t <= t3) {
+                            float pt = (t3 > t2) ? ((t - t2) / (t3 - t2)) : 1.0f;
+                            p->position.x = p2.x + (p3.x - p2.x) * pt;
+                            p->position.z = p2.z + (p3.z - p2.z) * pt;
+                            p->position.y = cur_y;
+                        } else {
+                            float pt = (1.0f > t3) ? ((t - t3) / (1.0f - t3)) : 1.0f;
+                            p->position.x = p3.x + (p4.x - p3.x) * pt;
+                            p->position.z = p3.z + (p4.z - p3.z) * pt;
+                            p->position.y = cur_y;
                         }
                     }
 
@@ -204,40 +255,6 @@ void controller_key_down(unsigned char key, int x, int y) {
             if (key == 'p' || key == 'P' || key == 27) {
                 world.appState = APP_PAUSED;
                 break;
-            }
-
-            /* School grades 1-9 */
-            if (key >= '1' && key <= '9') {
-                int g = key - '1';
-                int newState = !world.state.schoolOpen[g];
-                char msg[64];
-                sim_toggle_school(&world, g + 1, newState);
-                snprintf(msg, 64, "Grade %d %s", g + 1, newState ? "OPENED" : "CLOSED");
-                toast_show(msg, 0.3f, 0.7f, 1.0f);
-            }
-            /* Grade 10 */
-            if (key == '0') {
-                int newState = !world.state.schoolOpen[9];
-                char msg[64];
-                sim_toggle_school(&world, 10, newState);
-                snprintf(msg, 64, "Grade 10 %s", newState ? "OPENED" : "CLOSED");
-                toast_show(msg, 0.3f, 0.7f, 1.0f);
-            }
-            /* Grade 11 */
-            if (key == '-') {
-                int newState = !world.state.schoolOpen[10];
-                char msg[64];
-                sim_toggle_school(&world, 11, newState);
-                snprintf(msg, 64, "Grade 11 %s", newState ? "OPENED" : "CLOSED");
-                toast_show(msg, 0.3f, 0.7f, 1.0f);
-            }
-            /* Grade 12 */
-            if (key == '=') {
-                int newState = !world.state.schoolOpen[11];
-                char msg[64];
-                sim_toggle_school(&world, 12, newState);
-                snprintf(msg, 64, "Grade 12 %s", newState ? "OPENED" : "CLOSED");
-                toast_show(msg, 0.3f, 0.7f, 1.0f);
             }
 
             /* Going out */

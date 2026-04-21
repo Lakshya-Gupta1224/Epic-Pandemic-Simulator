@@ -1,3 +1,2 @@
-1. Why no deaths are happening? Fix it
-
-2. The transfer of people from one city to another should only happpen via roads but here so fix the motion mechanics
+1. going out should restrict movement to a lot of extent
+2. fix mental health deteriorating so fast

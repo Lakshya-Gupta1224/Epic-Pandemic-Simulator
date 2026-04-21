@@ -35,6 +35,25 @@ static void schedule_movements(GameWorld* world) {
             continue;
         }
 
+        /* Going out restriction: most non-infected people stay home */
+        if (!s->goingOutAllowed && p->state != STATE_INFECTED) {
+            /* 85% of people obey the restriction */
+            if ((rand() % 100) < 85) {
+                if (p->currentPlace != PLACE_HOME) {
+                    Building* home = &world->buildings[p->homeId];
+                    p->startPosition = p->position;
+                    p->targetPosition = home->position;
+                    p->targetPosition.y = (p->type == PERSON_CHILD) ? 0.6f : 0.9f;
+                    p->targetPosition.x += ((float)(rand() % 20) / 10.0f) - 1.0f;
+                    p->targetPosition.z += ((float)(rand() % 20) / 10.0f) - 1.0f;
+                    p->moveProgress = 0.0f;
+                    p->isMoving = 1;
+                    p->currentPlace = PLACE_HOME;
+                }
+                continue;
+            }
+        }
+
         /* Lockdown: percentage of people stay home */
         if (s->lockdownPercent > 0 && (rand() % 100) < (int)s->lockdownPercent) {
             /* Stay home or go home if away */

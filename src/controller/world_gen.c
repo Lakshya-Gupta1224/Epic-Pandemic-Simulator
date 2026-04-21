@@ -41,15 +41,18 @@ void world_generate(GameWorld* world) {
         halfW = reg->size.x * 0.5f;
         halfD = reg->size.z * 0.5f;
 
+        float stepX = reg->size.x / 5.0f;
+        float stepZ = reg->size.z / 5.0f;
+
         /* Hospital (1 per region) */
         {
             Building* hosp = &world->buildings[bIdx];
             hosp->id = bIdx;
             hosp->type = BUILDING_HOSPITAL;
             hosp->regionIndex = r;
-            hosp->position.x = reg->center.x + halfW * 0.55f;
+            hosp->position.x = reg->center.x - halfW + stepX * 4.5f;
             hosp->position.y = 0.0f;
-            hosp->position.z = reg->center.z - halfD * 0.45f;
+            hosp->position.z = reg->center.z - halfD + stepZ * 0.5f;
             hosp->maxCapacity = world->config.maxHospitalBeds;
             hosp->currCapacity = 0;
             hosp->residentCount = 0;
@@ -63,9 +66,9 @@ void world_generate(GameWorld* world) {
             sch->id = bIdx;
             sch->type = BUILDING_SCHOOL;
             sch->regionIndex = r;
-            sch->position.x = reg->center.x - halfW * 0.45f;
+            sch->position.x = reg->center.x - halfW + stepX * 0.5f;
             sch->position.y = 0.0f;
-            sch->position.z = reg->center.z - halfD * 0.55f;
+            sch->position.z = reg->center.z - halfD + stepZ * 4.5f;
             sch->maxCapacity = 200;
             sch->currCapacity = 0;
             sch->residentCount = 0;
@@ -78,14 +81,21 @@ void world_generate(GameWorld* world) {
             Building* house;
             Person* child;
             Person* adult;
+            
+            int bx, bz;
+            do { bx = rand() % 5; } while (bx == 2);
+            do { bz = rand() % 5; } while (bz == 2);
+            
+            float blockCx = reg->center.x - halfW + stepX * (bx + 0.5f);
+            float blockCz = reg->center.z - halfD + stepZ * (bz + 0.5f);
 
             house = &world->buildings[bIdx];
             house->id = bIdx;
             house->type = BUILDING_HOUSE;
             house->regionIndex = r;
-            house->position.x = reg->center.x + randf(-halfW * 0.85f, halfW * 0.85f);
+            house->position.x = blockCx + randf(-stepX * 0.25f, stepX * 0.25f);
             house->position.y = 0.0f;
-            house->position.z = reg->center.z + randf(-halfD * 0.85f, halfD * 0.85f);
+            house->position.z = blockCz + randf(-stepZ * 0.25f, stepZ * 0.25f);
             house->maxCapacity = PERSONS_PER_HOUSE;
             house->currCapacity = 0;
             house->residentCount = 0;

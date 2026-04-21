@@ -48,10 +48,10 @@ void decision_toggle_going_out(SimState* state, int allowed) {
 
     /* Mental health impact */
     if (!allowed) {
-        state->mentalHealthDelta -= 1.0f;
+        state->mentalHealthDelta -= 0.2f;
         state->economyDelta -= 1;
     } else {
-        state->mentalHealthDelta += 1.0f;
+        state->mentalHealthDelta += 0.2f;
         state->economyDelta += 1;
     }
 
@@ -62,9 +62,9 @@ void decision_toggle_sports(SimState* state, int allowed) {
     state->sportsAllowed = allowed ? 1 : 0;
 
     if (!allowed) {
-        state->mentalHealthDelta -= 0.5f;
+        state->mentalHealthDelta -= 0.1f;
     } else {
-        state->mentalHealthDelta += 0.5f;
+        state->mentalHealthDelta += 0.1f;
     }
 
     decision_recalc_rho(state);
@@ -90,7 +90,7 @@ void decision_set_lockdown(SimState* state, float percent) {
     state->lockdownPercent = percent;
 
     /* Lockdown costs mental health and economy */
-    state->mentalHealthDelta = -(percent / 100.0f) * 2.0f;
+    state->mentalHealthDelta = -(percent / 100.0f) * 0.4f;
     state->economyDelta = 1 + (int)(percent / 20.0f);
 
     decision_recalc_rho(state);

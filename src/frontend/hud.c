@@ -12,6 +12,9 @@ static float sliderMin[NUM_SLIDERS];
 static float sliderMax[NUM_SLIDERS];
 static int   activeSlider = -1;
 
+#define NUM_CHECKBOXES 16
+static float checkboxRects[NUM_CHECKBOXES][4];
+
 void hud_set_screen(int w, int h) { screenW = w; screenH = h; }
 
 static float slider_value_from_mouse(int idx, int mouseX) {
@@ -38,6 +41,21 @@ static void apply_slider_value(int idx, float val, GameWorld* world) {
     }
 }
 
+static void hud_show_toast(GameWorld* world, const char* msg, float r, float g, float b) {
+    int i, slot = 0;
+    float minTimer = 9999.0f;
+    for (i = 0; i < MAX_TOASTS; i++) {
+        if (!world->toasts[i].active) { slot = i; break; }
+        if (world->toasts[i].timer < minTimer) { minTimer = world->toasts[i].timer; slot = i; }
+    }
+    snprintf(world->toasts[slot].message, 64, "%s", msg);
+    world->toasts[slot].timer = TOAST_DURATION;
+    world->toasts[slot].r = r;
+    world->toasts[slot].g = g;
+    world->toasts[slot].b = b;
+    world->toasts[slot].active = 1;
+}
+
 int hud_handle_click(int mouseX, int mouseY, GameWorld* world) {
     int i;
     int glY = screenH - mouseY;
@@ -53,6 +71,34 @@ int hud_handle_click(int mouseX, int mouseY, GameWorld* world) {
             activeSlider = i;
             float val = slider_value_from_mouse(i, mouseX);
             apply_slider_value(i, val, world);
+            return 1;
+        }
+    }
+
+    for (i = 0; i < NUM_CHECKBOXES; i++) {
+        float cx = checkboxRects[i][0];
+        float cy = checkboxRects[i][1];
+        float cw = checkboxRects[i][2];
+        float ch = checkboxRects[i][3];
+
+        float click_w = cw;
+        if (i < 14) click_w = cw + 80;
+
+        if ((float)mouseX >= cx - 2 && (float)mouseX <= cx + click_w &&
+            (float)glY >= cy - 2 && (float)glY <= cy + ch + 4) {
+            
+            char tmsg[64];
+            if (i < 12) {
+                world->state.schoolOpen[i] = !world->state.schoolOpen[i];
+                snprintf(tmsg, 64, "Grade %d: %s", i + 1, world->state.schoolOpen[i] ? "Opened" : "Closed");
+                hud_show_toast(world, tmsg, 0.3f, 0.7f, 1.0f);
+            } else if (i == 12) {
+                world->state.goingOutAllowed = !world->state.goingOutAllowed;
+                hud_show_toast(world, world->state.goingOutAllowed ? "Going out ALLOWED" : "Going out RESTRICTED", 0.8f, 0.5f, 1.0f);
+            } else if (i == 13) {
+                world->state.sportsAllowed = !world->state.sportsAllowed;
+                hud_show_toast(world, world->state.sportsAllowed ? "Sports ALLOWED" : "Sports RESTRICTED", 1.0f, 0.4f, 0.2f);
+            }
             return 1;
         }
     }
@@ -102,6 +148,57 @@ void hud_draw_text(float x, float y, const char* text, Color4f c, void* font) {
     for (i = 0; text[i] != '\0'; i++) {
         glutBitmapCharacter(font, text[i]);
     }
+}
+
+static void hud_draw_checkbox(float x, float y, float size, int checked, const char* label, int cbIndex) {
+    Color4f white = {1.0f, 1.0f, 1.0f, 1.0f};
+    Color4f green = {0.3f, 0.9f, 0.4f, 1.0f};
+
+    if (cbIndex >= 0 && cbIndex < NUM_CHECKBOXES) {
+        checkboxRects[cbIndex][0] = x;
+        checkboxRects[cbIndex][1] = y;
+        checkboxRects[cbIndex][2] = size;
+        checkboxRects[cbIndex][3] = size;
+    }
+
+    glColor4f(0.5f, 0.5f, 0.6f, 1.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(x, y); glVertex2f(x+size, y);
+    glVertex2f(x+size, y+size); glVertex2f(x, y+size);
+    glEnd();
+
+    if (checked) {
+        glColor4f(green.r, green.g, green.b, 1.0f);
+        glBegin(GL_QUADS);
+        glVertex2f(x+2, y+2); glVertex2f(x+size-2, y+2);
+        glVertex2f(x+size-2, y+size-2); glVertex2f(x+2, y+size-2);
+        glEnd();
+    }
+
+    hud_draw_text(x + size + 6, y + 1, label, white, GLUT_BITMAP_HELVETICA_10);
+}
+
+static void hud_draw_button(float x, float y, float w, float h, const char* label, int btnIndex) {
+    Color4f white = {1.0f, 1.0f, 1.0f, 1.0f};
+    if (btnIndex >= 0 && btnIndex < NUM_CHECKBOXES) {
+        checkboxRects[btnIndex][0] = x;
+        checkboxRects[btnIndex][1] = y;
+        checkboxRects[btnIndex][2] = w;
+        checkboxRects[btnIndex][3] = h;
+    }
+    glColor4f(0.2f, 0.2f, 0.3f, 0.8f);
+    glBegin(GL_QUADS);
+    glVertex2f(x, y); glVertex2f(x+w, y);
+    glVertex2f(x+w, y+h); glVertex2f(x, y+h);
+    glEnd();
+    
+    glColor4f(0.4f, 0.4f, 0.5f, 1.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(x, y); glVertex2f(x+w, y);
+    glVertex2f(x+w, y+h); glVertex2f(x, y+h);
+    glEnd();
+    
+    hud_draw_text(x + w/2 - 3, y + h/2 - 4, label, white, GLUT_BITMAP_HELVETICA_10);
 }
 
 static void hud_draw_bar(float x, float y, float w, float h,
@@ -357,53 +454,21 @@ void render_hud(const GameWorld* world) {
         glBegin(GL_LINES);
         glVertex2f(px, py); glVertex2f(px + panelW - 10, py);
         glEnd();
-        py -= 12;
-
-        /* School grades in 2 columns */
-        for (g = 0; g < MAX_GRADES; g++) {
-            char gb[24];
-            char key;
-            float col_x;
-            if (g < 9) key = '1' + g;
-            else if (g == 9) key = '0';
-            else if (g == 10) key = '-';
-            else key = '=';
-
-            col_x = (g < 6) ? px : px + 110;
-
-            snprintf(gb, 24, "[%c] G%d:%s", key, g + 1,
-                     s->schoolOpen[g] ? "ON" : "OFF");
-            hud_draw_text(col_x, py, gb,
-                          s->schoolOpen[g] ? green : red,
-                          GLUT_BITMAP_HELVETICA_10);
-            if (g < 6 && g + 6 < MAX_GRADES) {
-                /* already handled in next iteration */
-            }
-            if (g == 5 || g == 11) py -= 14;
-            else if (g >= 6) { /* skip */ }
-            else py -= 14;
-        }
-
-        py -= 10;
+        py -= 14;
 
         /* Separator */
         glColor4f(0.3f, 0.3f, 0.4f, 0.4f);
         glBegin(GL_LINES);
         glVertex2f(px, py + 4); glVertex2f(px + panelW - 10, py + 4);
         glEnd();
-        py -= 8;
-
-        snprintf(buf, 64, "[G] Going Out: %s", s->goingOutAllowed ? "ON" : "OFF");
-        hud_draw_text(px, py, buf, s->goingOutAllowed ? green : red,
-                      GLUT_BITMAP_HELVETICA_12);
-        py -= 18;
-
-        snprintf(buf, 64, "[S] Sports: %s", s->sportsAllowed ? "ON" : "OFF");
-        hud_draw_text(px, py, buf, s->sportsAllowed ? green : red,
-                      GLUT_BITMAP_HELVETICA_12);
-        py -= 18;
-
         py -= 10;
+
+        snprintf(buf, 64, "Going Out [%c]", 'G');
+        hud_draw_checkbox(px, py + 2, 12.0f, s->goingOutAllowed, buf, 12);
+
+        snprintf(buf, 64, "Sports [%c]", 'S');
+        hud_draw_checkbox(px + 100, py + 2, 12.0f, s->sportsAllowed, buf, 13);
+        py -= 16;
 
         /* ── Interactive Sliders ── */
         {
@@ -483,13 +548,13 @@ void render_hud(const GameWorld* world) {
 
     /* ─── Toast Notifications ─── */
     {
-        float ty = (float)screenH * 0.50f;
+        float ty = (float)screenH * 0.70f;
         int t;
         for (t = 0; t < MAX_TOASTS; t++) {
             if (world->toasts[t].active) {
                 float alpha = (world->toasts[t].timer > 0.5f)
                     ? 1.0f : world->toasts[t].timer * 2.0f;
-                float tw = 320, th = 22;
+                float tw = 280, th = 22;
                 float tx_pos = 20;
 
                 /* Background */
@@ -528,7 +593,6 @@ void render_hud(const GameWorld* world) {
         float ty2;
 
         const char* lines[] = {
-            "1-9, 0, -, = : Toggle school grades 1-12",
             "G             : Toggle going out",
             "S             : Toggle outdoor sports",
             "+             : Increase sanitization",

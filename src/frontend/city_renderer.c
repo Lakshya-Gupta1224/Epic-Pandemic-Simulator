@@ -274,10 +274,28 @@ static void draw_vehicles(const GameWorld* world) {
         glPushMatrix();
         glTranslatef(veh->position.x, veh->position.y, veh->position.z);
         
-        /* Compute rotation so car points towards target */
-        float dx = veh->targetPos.x - veh->startPos.x;
-        float dz = veh->targetPos.z - veh->startPos.z;
-        float angle = atan2f(dx, dz) * 180.0f / 3.14159f;
+        /* Compute rotation dynamically based on Manhattan path segment */
+        float t = veh->progress;
+        int xFirst = (v % 2 == 0);
+        float midX = xFirst ? veh->targetPos.x : veh->startPos.x;
+        float midZ = xFirst ? veh->startPos.z : veh->targetPos.z;
+        
+        float cur_dx, cur_dz;
+        if (t <= 0.5f) {
+            cur_dx = midX - veh->startPos.x;
+            cur_dz = midZ - veh->startPos.z;
+        } else {
+            cur_dx = veh->targetPos.x - midX;
+            cur_dz = veh->targetPos.z - midZ;
+        }
+        
+        /* If not moving, maintain last orientation */
+        if (fabsf(cur_dx) < 0.01f && fabsf(cur_dz) < 0.01f) {
+            cur_dx = veh->targetPos.x - veh->startPos.x;
+            cur_dz = veh->targetPos.z - veh->startPos.z;
+        }
+
+        float angle = atan2f(cur_dx, cur_dz) * 180.0f / 3.14159f;
         glRotatef(angle, 0.0f, 1.0f, 0.0f);
         
         /* Body */
