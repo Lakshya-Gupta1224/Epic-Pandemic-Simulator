@@ -133,7 +133,7 @@ static void update_vehicles(GameWorld* world, float dt) {
         Vehicle* veh = &world->vehicles[v];
         float dx = veh->targetPos.x - veh->startPos.x;
         float dz = veh->targetPos.z - veh->startPos.z;
-        float dist = sqrtf(dx*dx + dz*dz);
+        float dist = sqrtf(dx*dx + dz*dz) * 1.414f; 
         if (dist < 1.0f) dist = 1.0f;
 
         veh->progress += (veh->speed * dt * world->state.timeScale) / dist;
@@ -145,8 +145,20 @@ static void update_vehicles(GameWorld* world, float dt) {
             veh->progress = 0.0f;
         }
 
-        veh->position.x = veh->startPos.x + (veh->targetPos.x - veh->startPos.x) * veh->progress;
-        veh->position.z = veh->startPos.z + (veh->targetPos.z - veh->startPos.z) * veh->progress;
+        float t = veh->progress;
+        int xFirst = (v % 2 == 0);
+        float midX = xFirst ? veh->targetPos.x : veh->startPos.x;
+        float midZ = xFirst ? veh->startPos.z : veh->targetPos.z;
+
+        if (t <= 0.5f) {
+            float pt = t * 2.0f;
+            veh->position.x = veh->startPos.x + (midX - veh->startPos.x) * pt;
+            veh->position.z = veh->startPos.z + (midZ - veh->startPos.z) * pt;
+        } else {
+            float pt = (t - 0.5f) * 2.0f;
+            veh->position.x = midX + (veh->targetPos.x - midX) * pt;
+            veh->position.z = midZ + (veh->targetPos.z - midZ) * pt;
+        }
     }
 }
 

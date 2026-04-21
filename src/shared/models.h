@@ -124,7 +124,7 @@ typedef struct {
 
 typedef struct {
     /* SEIR compartments (proportions) */
-    float S, E, I, R;
+    float S, E, I, R, D;
 
     /* Population counts */
     int   susceptible;
