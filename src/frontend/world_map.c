@@ -1,5 +1,6 @@
 #include "world_map.h"
 #include "hud.h"
+#include "texture_loader.h"
 #include <GL/glut.h>
 #include <math.h>
 #include <stdio.h>
@@ -46,6 +47,9 @@ void world_map_init(GameWorld* world) {
     wm->selectedCountry = -1;
     wm->hoveredVirus    = -1;
     wm->autoRotate      = 0.0f;
+
+    /* Load Earth texture */
+    wm->earthTexture = load_texture("assets/earth_texture.jpg");
 
     /* Countries */
     struct { const char* n; float la, lo; } cdata[] = {
@@ -292,32 +296,24 @@ static void setup_globe_camera(WorldMapState* wm) {
     gluLookAt(eyeX, eyeY, eyeZ, 0, 0, 0, 0, 1, 0);
 }
 
-static void render_globe_sphere(float gameTime) {
+static void render_globe_sphere(WorldMapState* wm, float gameTime) {
     GLUquadric* q = gluNewQuadric();
     gluQuadricNormals(q, GLU_SMOOTH);
+    gluQuadricTexture(q, GL_TRUE);
 
-    /* Lighting */
-    glEnable(GL_LIGHTING);
-    glEnable(GL_LIGHT0);
-    {
-        float lightPos[]  = {200.0f, 150.0f, 100.0f, 0.0f};
-        float lightAmb[]  = {0.15f, 0.15f, 0.2f, 1.0f};
-        float lightDiff[] = {0.8f, 0.8f, 0.9f, 1.0f};
-        glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
-        glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmb);
-        glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDiff);
-    }
+    /* Disable lighting to see texture clearly */
+    glDisable(GL_LIGHTING);
 
-    /* Ocean sphere */
-    {
-        float matDiff[] = {0.05f, 0.12f, 0.28f, 1.0f};
-        float matSpec[] = {0.3f, 0.4f, 0.5f, 1.0f};
-        glMaterialfv(GL_FRONT, GL_DIFFUSE, matDiff);
-        glMaterialfv(GL_FRONT, GL_SPECULAR, matSpec);
-        glMaterialf(GL_FRONT, GL_SHININESS, 60.0f);
-    }
+    /* Enable texturing and bind Earth texture */
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, wm->earthTexture);
+    
+    /* Set color to white for full texture visibility */
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    
     gluSphere(q, GLOBE_RADIUS, GLOBE_SLICES, GLOBE_STACKS);
 
+    glDisable(GL_TEXTURE_2D);
     glDisable(GL_LIGHTING);
     gluDeleteQuadric(q);
 
@@ -540,12 +536,21 @@ static int globe_hit_test(WorldMapState* wm, int mouseX, int mouseY) {
     double lat = asin(hy / R) * 180.0 / M_PI;
     double lon = atan2(hz, hx) * 180.0 / M_PI;
 
-    /* Find closest country */
+    /* Find closest country with improved distance calculation */
     int bestIdx = -1;
-    float bestDist = 30.0f; /* max click radius in degrees */
+    float bestDist = 25.0f; /* Reduced radius for more accuracy */
     for (i = 0; i < wm->countryCount; i++) {
-        float dlat = wm->countries[i].lat - (float)lat;
-        float dlon = wm->countries[i].lon - (float)lon;
+        float countryLat = wm->countries[i].lat;
+        float countryLon = wm->countries[i].lon;
+        
+        /* Handle longitude wraparound */
+        float dlon = countryLon - (float)lon;
+        if (dlon > 180.0f) dlon -= 360.0f;
+        if (dlon < -180.0f) dlon += 360.0f;
+        
+        float dlat = countryLat - (float)lat;
+        
+        /* Use proper distance calculation */
         float d = sqrtf(dlat*dlat + dlon*dlon);
         if (d < bestDist) { bestDist = d; bestIdx = i; }
     }
@@ -578,8 +583,19 @@ static void draw_globe_hud(WorldMapState* wm, float gameTime) {
     glVertex2f((float)w, (float)h); glVertex2f(0, (float)h);
     glEnd();
 
-    hud_draw_text((float)w/2 - 100, (float)h - 30, "SELECT A COUNTRY TO INFECT",
-                  white, GLUT_BITMAP_HELVETICA_18);
+    /* Show selected country name or default message */
+    if (wm->selectedCountry >= 0 && wm->selectedCountry < wm->countryCount) {
+        Country* c = &wm->countries[wm->selectedCountry];
+        char title[128];
+        snprintf(title, 128, "SELECTED: %s - Choose Virus Type", c->name);
+        float titleWidth = 0;
+        int i;
+        for (i = 0; title[i]; i++) titleWidth += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, title[i]);
+        hud_draw_text(((float)w - titleWidth)/2, (float)h - 30, title, white, GLUT_BITMAP_HELVETICA_18);
+    } else {
+        hud_draw_text((float)w/2 - 100, (float)h - 30, "SELECT A COUNTRY TO INFECT",
+                      white, GLUT_BITMAP_HELVETICA_18);
+    }
 
     /* Bottom info bar */
     glColor4f(0.04f, 0.04f, 0.06f, 0.6f);
@@ -663,10 +679,10 @@ void render_world_map(GameWorld* world) {
     render_atmosphere();
 
     /* Ocean sphere */
-    render_globe_sphere(gt);
+    render_globe_sphere(wm, gt);
 
-    /* Continents */
-    draw_all_continents();
+    /* Continents - DISABLED - Earth texture already contains continents */
+    /* draw_all_continents(); */
 
     /* Country dots */
     draw_country_dots(wm, gt);

@@ -2,6 +2,7 @@
 #define MODELS_H
 
 #include "constants.h"
+#include <GL/glut.h>
 
 /* ═══════════════════════════════════════════
    ENUMERATIONS
@@ -262,6 +263,7 @@ typedef struct {
     FlightRoute routes[MAX_ROUTES];
     int       routeCount;
     int       mouseX, mouseY;
+    GLuint    earthTexture;
 } WorldMapState;
 
 typedef struct {

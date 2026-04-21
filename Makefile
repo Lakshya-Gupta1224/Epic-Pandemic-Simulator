@@ -31,7 +31,7 @@ FRONTEND_SRC = src/frontend/renderer.c \
 CONTROLLER_SRC = src/controller/controller.c \
                  src/controller/world_gen.c
 
-SRC = src/main.c $(BACKEND_SRC) $(FRONTEND_SRC) $(CONTROLLER_SRC)
+SRC = src/main.c $(BACKEND_SRC) $(FRONTEND_SRC) $(CONTROLLER_SRC) src/shared/texture_loader.c
 OBJ = $(SRC:.c=.o)
 TARGET = pandemic_sim
 
