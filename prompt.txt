@@ -1,2 +1,1 @@
-1. going out should restrict movement to a lot of extent
-2. fix mental health deteriorating so fast
+1. i want to save the state if each country so whenever i clcik it again on the map it starts from where i left off. generate an implementation plan for this

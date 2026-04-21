@@ -544,6 +544,9 @@ void render_hud(const GameWorld* world) {
         py -= 14;
         hud_draw_text(px, py, "[F] Skip  [D] Debug", gray,
                       GLUT_BITMAP_HELVETICA_10);
+        py -= 14;
+        hud_draw_text(px, py, "[B] Back to World Map", gray,
+                      GLUT_BITMAP_HELVETICA_10);
     }
 
     /* ─── Toast Notifications ─── */

@@ -35,11 +35,24 @@ typedef enum {
 } BuildingType;
 
 typedef enum {
-    APP_MENU    = 0,
-    APP_RUNNING = 1,
-    APP_PAUSED  = 2,
-    APP_RESULT  = 3
+    APP_MENU         = 0,
+    APP_RUNNING      = 1,
+    APP_PAUSED       = 2,
+    APP_RESULT       = 3,
+    APP_WORLD_MAP    = 4,
+    APP_VIRUS_SELECT = 5
 } AppState;
+
+typedef enum {
+    VIRUS_STEALTH       = 0,
+    VIRUS_AGGRESSIVE    = 1,
+    VIRUS_ENVIRONMENTAL = 2
+} VirusType;
+
+typedef enum {
+    ROUTE_AIR = 0,
+    ROUTE_SEA = 1
+} RouteType;
 
 typedef enum {
     END_NONE            = -1,
@@ -212,6 +225,46 @@ typedef struct {
 } CameraState;
 
 typedef struct {
+    char  name[32];
+    float lat, lon;
+    int   population;
+    int   isSuperSpreadHub;
+    int   countryIndex;
+} CityNode;
+
+typedef struct {
+    int       fromCity, toCity;
+    RouteType type;
+    float     animProgress;
+} FlightRoute;
+
+typedef struct {
+    char  name[32];
+    float lat, lon;
+    float infectionLevel;
+    int   selected;
+    void* savedState;
+} Country;
+
+typedef struct {
+    float     globeAzimuth, globeElevation, globeZoom;
+    float     autoRotate;
+    int       dragActive;
+    int       lastMouseX, lastMouseY;
+    int       hoveredCountry;
+    int       selectedCountry;
+    int       hoveredVirus;
+    VirusType selectedVirus;
+    Country   countries[MAX_COUNTRIES];
+    int       countryCount;
+    CityNode  cities[MAX_CITIES];
+    int       cityCount;
+    FlightRoute routes[MAX_ROUTES];
+    int       routeCount;
+    int       mouseX, mouseY;
+} WorldMapState;
+
+typedef struct {
     char    message[64];
     float   timer;
     float   r, g, b;
@@ -235,6 +288,7 @@ typedef struct {
     Toast       toasts[MAX_TOASTS];
     float       gameTime;
     int         showHelp;
+    WorldMapState worldMap;
 } GameWorld;
 
 #endif /* MODELS_H */

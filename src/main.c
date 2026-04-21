@@ -38,6 +38,10 @@ void motion(int x, int y) {
     controller_mouse_drag(x, y);
 }
 
+void passive_motion(int x, int y) {
+    controller_passive_motion(x, y);
+}
+
 void reshape(int w, int h) {
     controller_resize(w, h);
 }
@@ -56,6 +60,7 @@ int main(int argc, char** argv) {
     glutKeyboardFunc(keyboard);
     glutMouseFunc(mouse);
     glutMotionFunc(motion);
+    glutPassiveMotionFunc(passive_motion);
     glutReshapeFunc(reshape);
 
     lastTime = glutGet(GLUT_ELAPSED_TIME);

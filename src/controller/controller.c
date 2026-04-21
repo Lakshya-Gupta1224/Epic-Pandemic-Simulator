@@ -7,6 +7,7 @@
 #include "menu.h"
 #include "simulation.h"
 #include "world_gen.h"
+#include "world_map.h"
 #include <GL/glut.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,6 +15,54 @@
 #include <math.h>
 
 static GameWorld world;
+
+/* ─── State Persistence ─── */
+typedef struct {
+    Person          persons[MAX_PERSONS];
+    int             personCount;
+    Building        buildings[MAX_BUILDINGS];
+    int             buildingCount;
+    Region          regions[MAX_REGIONS];
+    int             regionCount;
+    Vehicle         vehicles[100];
+    int             vehicleCount;
+    SimConfig       config;
+    SimState        state;
+    DebriefingStats stats;
+    float           gameTime;
+} CountrySimSave;
+
+static void save_country_state(GameWorld* w) {
+    if (w->worldMap.selectedCountry >= 0) {
+        Country* c = &w->worldMap.countries[w->worldMap.selectedCountry];
+        if (c->savedState == NULL) {
+            c->savedState = malloc(sizeof(CountrySimSave));
+        }
+        if (c->savedState != NULL) {
+            CountrySimSave* save = (CountrySimSave*)c->savedState;
+            memcpy(save->persons, w->persons, sizeof(Person) * w->personCount);
+            save->personCount = w->personCount;
+            memcpy(save->buildings, w->buildings, sizeof(Building) * w->buildingCount);
+            save->buildingCount = w->buildingCount;
+            memcpy(save->regions, w->regions, sizeof(Region) * w->regionCount);
+            save->regionCount = w->regionCount;
+            memcpy(save->vehicles, w->vehicles, sizeof(Vehicle) * w->vehicleCount);
+            save->vehicleCount = w->vehicleCount;
+            save->config = w->config;
+            save->state = w->state;
+            save->stats = w->stats;
+            save->gameTime = w->gameTime;
+        }
+        /* Update infection level visualization */
+        float totalPop = w->config.population;
+        float infected = (float)w->state.infected;
+        float dead = (float)w->state.dead;
+        float recovered = (float)w->state.recovered;
+        float level = (infected + dead + recovered) / totalPop;
+        if (level > 1.0f) level = 1.0f;
+        c->infectionLevel = level;
+    }
+}
 
 /* ─── Smoothstep easing ─── */
 static float smoothstep(float t) {
@@ -60,6 +109,8 @@ void controller_init(int w, int h) {
     world.appState = APP_MENU;
     world.gameTime = 0.0f;
     world.showHelp = 0;
+
+    world_map_init(&world);
 }
 
 /* ─── Road Snapping Helpers ─── */
@@ -198,6 +249,14 @@ void controller_update(float dt) {
 
         case APP_RESULT:
             break;
+
+        case APP_WORLD_MAP:
+            world_map_update(&world, dt);
+            break;
+
+        case APP_VIRUS_SELECT:
+            world_map_update(&world, dt);
+            break;
     }
 
     glutPostRedisplay();
@@ -228,6 +287,15 @@ void controller_render(void) {
         case APP_RESULT:
             render_results(&world, world.gameTime);
             break;
+
+        case APP_WORLD_MAP:
+            render_world_map(&world);
+            break;
+
+        case APP_VIRUS_SELECT:
+            render_world_map(&world);
+            render_virus_select(&world);
+            break;
     }
 
     glutSwapBuffers();
@@ -242,10 +310,7 @@ void controller_key_down(unsigned char key, int x, int y) {
     switch (world.appState) {
         case APP_MENU:
             if (key == 13) {  /* ENTER */
-                world_generate(&world);
-                sim_init(&world, world.config);
-                world.appState = APP_RUNNING;
-                toast_show("Simulation started! Good luck.", 0.3f, 0.9f, 0.4f);
+                world.appState = APP_WORLD_MAP;
             }
             if (key == 'q' || key == 'Q' || key == 27) exit(0);
             break;
@@ -254,6 +319,14 @@ void controller_key_down(unsigned char key, int x, int y) {
             /* Pause */
             if (key == 'p' || key == 'P' || key == 27) {
                 world.appState = APP_PAUSED;
+                break;
+            }
+
+            /* Back to world map */
+            if (key == 'b' || key == 'B') {
+                save_country_state(&world);
+                world.appState = APP_WORLD_MAP;
+                toast_show("Returned to World Map", 0.3f, 0.7f, 1.0f);
                 break;
             }
 
@@ -417,14 +490,28 @@ void controller_key_down(unsigned char key, int x, int y) {
 
         case APP_RESULT:
             if (key == 'r' || key == 'R') {
+                save_country_state(&world);
                 memset(&world.state, 0, sizeof(SimState));
                 memset(&world.stats, 0, sizeof(DebriefingStats));
                 world.personCount = 0;
                 world.buildingCount = 0;
                 world.regionCount = 0;
+                world.appState = APP_WORLD_MAP;
+            }
+            if (key == 'q' || key == 'Q') exit(0);
+            break;
+
+        case APP_WORLD_MAP:
+            if (key == 27) { /* ESC */
                 world.appState = APP_MENU;
             }
             if (key == 'q' || key == 'Q') exit(0);
+            break;
+
+        case APP_VIRUS_SELECT:
+            if (key == 27) { /* ESC */
+                world.appState = APP_WORLD_MAP;
+            }
             break;
     }
 }
@@ -439,6 +526,79 @@ void controller_mouse_click(int button, int state, int x, int y) {
         }
         input_mouse_click(button, state, x, y, &world.camera);
     }
+    else if (world.appState == APP_WORLD_MAP) {
+        if (button == GLUT_LEFT_BUTTON) {
+            if (state == GLUT_DOWN) {
+                world_map_drag_start(&world, x, y);
+            } else {
+                world_map_drag_end(&world);
+                /* If barely dragged, treat as click */
+                if (world_map_click(&world, x, y)) {
+                    int cIdx = world.worldMap.selectedCountry;
+                    if (cIdx >= 0 && world.worldMap.countries[cIdx].savedState != NULL) {
+                        /* RESTORE SAVED STATE */
+                        CountrySimSave* save = (CountrySimSave*)world.worldMap.countries[cIdx].savedState;
+                        memcpy(world.persons, save->persons, sizeof(Person) * save->personCount);
+                        world.personCount = save->personCount;
+                        memcpy(world.buildings, save->buildings, sizeof(Building) * save->buildingCount);
+                        world.buildingCount = save->buildingCount;
+                        memcpy(world.regions, save->regions, sizeof(Region) * save->regionCount);
+                        world.regionCount = save->regionCount;
+                        memcpy(world.vehicles, save->vehicles, sizeof(Vehicle) * save->vehicleCount);
+                        world.vehicleCount = save->vehicleCount;
+                        world.config = save->config;
+                        world.state = save->state;
+                        world.stats = save->stats;
+                        world.gameTime = save->gameTime;
+
+                        /* Clear old toasts */
+                        memset(world.toasts, 0, sizeof(Toast) * MAX_TOASTS);
+
+                        world.appState = APP_RUNNING;
+                    } else {
+                        world.appState = APP_VIRUS_SELECT;
+                    }
+                }
+            }
+        }
+        /* Scroll wheel */
+        if (button == 3 && state == GLUT_DOWN) world_map_scroll(&world, 1);
+        if (button == 4 && state == GLUT_DOWN) world_map_scroll(&world, -1);
+    }
+    else if (world.appState == APP_VIRUS_SELECT) {
+        if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+            if (virus_select_click(&world, x, y)) {
+                /* Configure sim based on virus type */
+                VirusType vt = world.worldMap.selectedVirus;
+                switch (vt) {
+                    case VIRUS_STEALTH:
+                        world.config.R0 = 1.8f;
+                        world.config.incubationPeriod = 14.0f;
+                        world.config.infectionPeriod = 14.0f;
+                        break;
+                    case VIRUS_AGGRESSIVE:
+                        world.config.R0 = 4.0f;
+                        world.config.incubationPeriod = 3.0f;
+                        world.config.infectionPeriod = 7.0f;
+                        break;
+                    case VIRUS_ENVIRONMENTAL:
+                        world.config.R0 = 2.5f;
+                        world.config.incubationPeriod = 7.0f;
+                        world.config.infectionPeriod = 10.0f;
+                        break;
+                }
+                /* Mark country as infected */
+                if (world.worldMap.selectedCountry >= 0)
+                    world.worldMap.countries[world.worldMap.selectedCountry].infectionLevel = 0.1f;
+
+                /* Generate world and start sim */
+                world_generate(&world);
+                sim_init(&world, world.config);
+                world.appState = APP_RUNNING;
+                toast_show("Simulation started! Good luck.", 0.3f, 0.9f, 0.4f);
+            }
+        }
+    }
 }
 
 void controller_mouse_drag(int x, int y) {
@@ -447,6 +607,15 @@ void controller_mouse_drag(int x, int y) {
             return; /* Handled by HUD */
         }
         input_mouse_drag(x, y, &world.camera);
+    }
+    else if (world.appState == APP_WORLD_MAP) {
+        world_map_drag(&world, x, y);
+    }
+}
+
+void controller_passive_motion(int x, int y) {
+    if (world.appState == APP_WORLD_MAP || world.appState == APP_VIRUS_SELECT) {
+        world_map_passive_motion(&world, x, y);
     }
 }
 
