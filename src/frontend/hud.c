@@ -358,7 +358,6 @@ void render_hud(const GameWorld* world) {
     char buf[128];
     Color4f white = {1.0f, 1.0f, 1.0f, 1.0f};
     Color4f red   = {1.0f, 0.35f, 0.35f, 1.0f};
-    Color4f green = {0.3f, 0.9f, 0.4f, 1.0f};
     Color4f gray  = {0.55f, 0.55f, 0.65f, 1.0f};
     Color4f cyan  = {0.4f, 0.8f, 1.0f, 1.0f};
     int g;

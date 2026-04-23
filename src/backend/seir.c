@@ -48,8 +48,6 @@ void seir_init(SimState* state, SimConfig* config) {
  *   mental_health_update() is called at the end of each day to consume it.
  */
 void seir_step(SimState* state, SimConfig* config) {
-    if (state->currentDay >= config->maxDays) return;
-
     /* Clamp rho */
     if (state->rho < 0.0f) state->rho = 0.0f;
     if (state->rho > 2.0f) state->rho = 2.0f;

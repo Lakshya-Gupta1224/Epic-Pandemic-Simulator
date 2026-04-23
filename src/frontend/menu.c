@@ -233,12 +233,31 @@ void render_results(const GameWorld* world, float gameTime) {
     Color4f redC  = {0.9f, 0.3f, 0.3f, 1.0f};
     Color4f greenC = {0.3f, 0.9f, 0.4f, 1.0f};
 
-    const char* headlines[] = {
-        "Pandemic Ended Successfully!",
-        "Prevention Budget Depleted!",
-        "Pandemic Continues After Max Days...",
-        "Mental Health Crisis!"
-    };
+    const char* headline = "Simulation Ended";
+    Color4f hc = gray;
+
+    switch (s->endCondition) {
+        case END_VICTORY:
+            headline = "PANDEMIC ERADICATED: VICTORY!";
+            hc = greenC;
+            break;
+        case END_BUDGET_DEPLETED:
+            headline = "ECONOMIC COLLAPSE: BUDGET EXHAUSTED!";
+            hc = redC;
+            break;
+        case END_MENTAL_CRISIS:
+            headline = "SOCIETAL BREAKDOWN: MENTAL HEALTH ZERO!";
+            hc = redC;
+            break;
+        case END_POPULATION_ZERO:
+            headline = "EXTINCTION: POPULATION REACHED ZERO!";
+            hc = redC;
+            break;
+        default:
+            headline = "SIMULATION TERMINATED";
+            hc = gray;
+            break;
+    }
 
     glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
     gluOrtho2D(0, w, 0, h);
@@ -254,11 +273,10 @@ void render_results(const GameWorld* world, float gameTime) {
     cy = h * 0.88f;
 
     /* Headline */
-    if (s->endCondition >= 0 && s->endCondition <= 3) {
-        Color4f hc = (s->endCondition == END_PANDEMIC_OVER) ? greenC : redC;
-        hud_draw_text((float)w/2 - 130, cy, headlines[s->endCondition], hc,
-                      GLUT_BITMAP_TIMES_ROMAN_24);
-    }
+    float tw = 0;
+    for (int i=0; headline[i]; i++) tw += glutBitmapWidth(GLUT_BITMAP_TIMES_ROMAN_24, headline[i]);
+    hud_draw_text((float)w/2 - tw/2, cy, headline, hc, GLUT_BITMAP_TIMES_ROMAN_24);
+
     cy -= 35;
 
     snprintf(buf, 128, "Simulation ended on Day %d", s->currentDay);

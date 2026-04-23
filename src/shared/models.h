@@ -57,11 +57,10 @@ typedef enum {
 
 typedef enum {
     END_NONE               = -1,
-    END_PANDEMIC_OVER      =  0,
     END_BUDGET_DEPLETED    =  1,
-    END_MAX_DAYS           =  2,
-    END_MENTAL_CRISIS      =  3,
-    END_HOSPITAL_COLLAPSE  =  4   /* hospital at max for 10 consecutive days */
+    END_MENTAL_CRISIS      =  2,
+    END_POPULATION_ZERO    =  3,
+    END_VICTORY            =  4
 } EndCondition;
 
 /* ═══════════════════════════════════════════
