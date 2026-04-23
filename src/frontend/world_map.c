@@ -14,13 +14,28 @@
    COORDINATE HELPERS
    ═══════════════════════════════════════════ */
 
+/*
+ * Geographic (lat, lon) -> world-space position.
+ *
+ * The gluSphere is rendered with glRotatef(90,X) then glRotatef(180,Z)
+ * plus a texture-matrix glScalef(-1,1,1).  Tracing those transforms:
+ *
+ *   x_world =  sin(lon_rad) * cos(lat_rad)
+ *   y_world =  sin(lat_rad)               <- latitude lives on Y; north = +Y
+ *   z_world = -cos(lon_rad) * cos(lat_rad)
+ *
+ * Camera is Y-up; eye orbits in the XZ equatorial plane.
+ * Inverse (hit-test):
+ *   lat = asin(hy / R)
+ *   lon = atan2(hx, -hz)
+ */
 static Vec3 latlon_to_sphere(float lat, float lon, float radius) {
     float la = (float)(lat * M_PI / 180.0);
     float lo = (float)(lon * M_PI / 180.0);
     Vec3 p;
-    p.x = radius * cosf(la) * cosf(lo);
-    p.y = radius * sinf(la);
-    p.z = radius * cosf(la) * sinf(lo);
+    p.x =  radius * sinf(lo) * cosf(la);
+    p.y =  radius * sinf(la);           /* north pole -> +Y  */
+    p.z = -radius * cosf(lo) * cosf(la);
     return p;
 }
 
@@ -52,28 +67,33 @@ void world_map_init(GameWorld* world) {
     wm->earthTexture = load_texture("assets/earth_texture.jpg");
 
     /* Countries */
-    struct { const char* n; float la, lo; } cdata[] = {
-        {"United States",  40.0f, -100.0f},
-        {"Brazil",        -10.0f,  -55.0f},
-        {"United Kingdom", 54.0f,   -2.0f},
-        {"France",         46.0f,    2.0f},
-        {"Germany",        51.0f,   10.0f},
-        {"India",          22.0f,   78.0f},
-        {"China",          35.0f,  105.0f},
-        {"Japan",          36.0f,  138.0f},
-        {"Australia",     -25.0f,  135.0f},
-        {"South Africa",  -30.0f,   25.0f},
-        {"Nigeria",         9.0f,    8.0f},
-        {"Russia",         60.0f,   90.0f},
-        {"Egypt",          27.0f,   30.0f},
-        {"Mexico",         23.0f, -102.0f},
-        {"Argentina",     -35.0f,  -65.0f}
+    struct { const char* n; float la, lo; float min_la, max_la; float min_lo, max_lo; } cdata[] = {
+        {"United States",  40.0f, -100.0f, 24.0f, 49.0f, -125.0f, -66.0f},
+        {"Brazil",        -10.0f,  -55.0f, -33.0f, 5.0f, -74.0f, -34.0f},
+        {"United Kingdom", 54.0f,   -2.0f, 50.0f, 60.0f, -8.0f, 2.0f},
+        {"France",         46.0f,    2.0f, 41.0f, 51.0f, -5.0f, 9.0f},
+        {"Germany",        51.0f,   10.0f, 47.0f, 55.0f, 5.0f, 15.0f},
+        {"India",          22.0f,   78.0f, 8.0f, 35.0f, 68.0f, 97.0f},
+        {"China",          35.0f,  105.0f, 18.0f, 53.0f, 73.0f, 134.0f},
+        {"Japan",          36.0f,  138.0f, 31.0f, 45.0f, 129.0f, 146.0f},
+        {"Australia",     -25.0f,  135.0f, -43.0f, -10.0f, 113.0f, 153.0f},
+        {"South Africa",  -30.0f,   25.0f, -35.0f, -22.0f, 16.0f, 33.0f},
+        {"Nigeria",         9.0f,    8.0f, 4.0f, 14.0f, 2.0f, 14.0f},
+        {"Russia",         60.0f,   90.0f, 41.0f, 82.0f, 19.0f, 180.0f},
+        {"Egypt",          27.0f,   30.0f, 22.0f, 31.0f, 25.0f, 35.0f},
+        {"Mexico",         23.0f, -102.0f, 14.0f, 32.0f, -118.0f, -86.0f},
+        {"Argentina",     -35.0f,  -65.0f, -55.0f, -21.0f, -73.0f, -53.0f},
+        {"Antarctica",    -80.0f,   0.0f, -90.0f, -60.0f, -180.0f, 180.0f}
     };
-    wm->countryCount = 15;
-    for (i = 0; i < 15; i++) {
+    wm->countryCount = 16;
+    for (i = 0; i < 16; i++) {
         strncpy(wm->countries[i].name, cdata[i].n, 31);
         wm->countries[i].lat = cdata[i].la;
         wm->countries[i].lon = cdata[i].lo;
+        wm->countries[i].minLat = cdata[i].min_la;
+        wm->countries[i].maxLat = cdata[i].max_la;
+        wm->countries[i].minLon = cdata[i].min_lo;
+        wm->countries[i].maxLon = cdata[i].max_lo;
         wm->countries[i].infectionLevel = 0.0f;
         wm->countries[i].selected = 0;
     }
@@ -277,23 +297,27 @@ static void draw_continent(const float verts[][2], int count, float R,
 static void setup_globe_camera(WorldMapState* wm) {
     int w = glutGet(GLUT_WINDOW_WIDTH);
     int h = glutGet(GLUT_WINDOW_HEIGHT);
+    /* Reserve right side for sidebar */
+    int sideW = 220;
+    int globeW = (w > sideW + 100) ? w - sideW : w;
 
-    glViewport(0, 0, w, h);
+    glViewport(0, 0, globeW, h);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(45.0, (double)w / (double)(h > 0 ? h : 1), 1.0, 1000.0);
+    gluPerspective(45.0, (double)globeW / (double)(h > 0 ? h : 1), 1.0, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
     float camDist = wm->globeZoom;
+    /* Standard Y-up orbit: elevation above XZ plane, azimuth in XZ plane. */
     float elev = (float)(wm->globeElevation * M_PI / 180.0);
     float azim = (float)((wm->globeAzimuth + wm->autoRotate) * M_PI / 180.0);
 
     float eyeX = camDist * cosf(elev) * sinf(azim);
-    float eyeY = camDist * sinf(elev);
+    float eyeY = camDist * sinf(elev);       /* elevation lifts in Y (north) */
     float eyeZ = camDist * cosf(elev) * cosf(azim);
 
-    gluLookAt(eyeX, eyeY, eyeZ, 0, 0, 0, 0, 1, 0);
+    gluLookAt(eyeX, eyeY, eyeZ, 0, 0, 0, 0, 1, 0);  /* up = +Y = north pole */
 }
 
 static void render_globe_sphere(WorldMapState* wm, float gameTime) {
@@ -311,7 +335,23 @@ static void render_globe_sphere(WorldMapState* wm, float gameTime) {
     /* Set color to white for full texture visibility */
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     
+    glPushMatrix();
+    glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
+    glRotatef(180.0f, 0.0f, 0.0f, 1.0f);
+    
+    /* Flip texture horizontally to fix left-to-right mirroring */
+    glMatrixMode(GL_TEXTURE);
+    glPushMatrix();
+    glScalef(-1.0f, 1.0f, 1.0f);
+    glMatrixMode(GL_MODELVIEW);
+    
     gluSphere(q, GLOBE_RADIUS, GLOBE_SLICES, GLOBE_STACKS);
+    
+    glMatrixMode(GL_TEXTURE);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+    
+    glPopMatrix();
 
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_LIGHTING);
@@ -531,28 +571,38 @@ static int globe_hit_test(WorldMapState* wm, int mouseX, int mouseY) {
     double hy = nearY + t * dy;
     double hz = nearZ + t * dz;
 
-    /* Convert to lat/lon */
+    /* Inverse of latlon_to_sphere:
+       x =  sin(lon)*cos(lat)
+       y =  sin(lat)           <- lat on Y axis
+       z = -cos(lon)*cos(lat)
+       => lat = asin(hy / R)
+       => lon = atan2(hx, -hz)
+    */
     double R = GLOBE_RADIUS;
     double lat = asin(hy / R) * 180.0 / M_PI;
-    double lon = atan2(hz, hx) * 180.0 / M_PI;
+    double lon = atan2(hx, -hz) * 180.0 / M_PI;
 
-    /* Find closest country with improved distance calculation */
+    /* Find closest country using bounding boxes and center distance */
     int bestIdx = -1;
-    float bestDist = 25.0f; /* Reduced radius for more accuracy */
+    float bestDist = 9999.0f;
     for (i = 0; i < wm->countryCount; i++) {
-        float countryLat = wm->countries[i].lat;
-        float countryLon = wm->countries[i].lon;
+        float minLat = wm->countries[i].minLat;
+        float maxLat = wm->countries[i].maxLat;
+        float minLon = wm->countries[i].minLon;
+        float maxLon = wm->countries[i].maxLon;
         
-        /* Handle longitude wraparound */
-        float dlon = countryLon - (float)lon;
-        if (dlon > 180.0f) dlon -= 360.0f;
-        if (dlon < -180.0f) dlon += 360.0f;
-        
-        float dlat = countryLat - (float)lat;
-        
-        /* Use proper distance calculation */
-        float d = sqrtf(dlat*dlat + dlon*dlon);
-        if (d < bestDist) { bestDist = d; bestIdx = i; }
+        if (lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon) {
+            float dlat = wm->countries[i].lat - (float)lat;
+            float dlon = wm->countries[i].lon - (float)lon;
+            if (dlon > 180.0f) dlon -= 360.0f;
+            if (dlon < -180.0f) dlon += 360.0f;
+            
+            float d = sqrtf(dlat*dlat + dlon*dlon);
+            if (d < bestDist) {
+                bestDist = d;
+                bestIdx = i;
+            }
+        }
     }
     return bestIdx;
 }
@@ -567,6 +617,9 @@ static void draw_globe_hud(WorldMapState* wm, float gameTime) {
     Color4f white = {1,1,1,1};
     Color4f gray  = {0.6f, 0.6f, 0.7f, 1.0f};
 
+    /* Reset viewport to full window for 2D overlay + sidebar */
+    glViewport(0, 0, w, h);
+
     glMatrixMode(GL_PROJECTION);
     glPushMatrix(); glLoadIdentity();
     gluOrtho2D(0, w, 0, h);
@@ -575,64 +628,141 @@ static void draw_globe_hud(WorldMapState* wm, float gameTime) {
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_LIGHTING);
     glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     /* Title bar */
     glColor4f(0.04f, 0.04f, 0.06f, 0.7f);
     glBegin(GL_QUADS);
-    glVertex2f(0, (float)h - 45); glVertex2f((float)w, (float)h - 45);
-    glVertex2f((float)w, (float)h); glVertex2f(0, (float)h);
+    glVertex2f(0, (float)h - 45); glVertex2f((float)(w - 220), (float)h - 45);
+    glVertex2f((float)(w - 220), (float)h); glVertex2f(0, (float)h);
     glEnd();
 
     /* Show selected country name or default message */
     if (wm->selectedCountry >= 0 && wm->selectedCountry < wm->countryCount) {
         Country* c = &wm->countries[wm->selectedCountry];
         char title[128];
-        snprintf(title, 128, "SELECTED: %s - Choose Virus Type", c->name);
-        float titleWidth = 0;
         int i;
+        float titleWidth = 0;
+        snprintf(title, 128, "SELECTED: %s  --  Click virus in sidebar to begin", c->name);
         for (i = 0; title[i]; i++) titleWidth += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, title[i]);
-        hud_draw_text(((float)w - titleWidth)/2, (float)h - 30, title, white, GLUT_BITMAP_HELVETICA_18);
+        hud_draw_text(((float)(w - 220) - titleWidth) / 2, (float)h - 30, title, white, GLUT_BITMAP_HELVETICA_18);
     } else {
-        hud_draw_text((float)w/2 - 100, (float)h - 30, "SELECT A COUNTRY TO INFECT",
+        hud_draw_text(30, (float)h - 30, "SELECT A COUNTRY FROM THE SIDEBAR TO INFECT",
                       white, GLUT_BITMAP_HELVETICA_18);
     }
 
     /* Bottom info bar */
     glColor4f(0.04f, 0.04f, 0.06f, 0.6f);
     glBegin(GL_QUADS);
-    glVertex2f(0, 0); glVertex2f((float)w, 0);
-    glVertex2f((float)w, 35); glVertex2f(0, 35);
+    glVertex2f(0, 0); glVertex2f((float)(w - 220), 0);
+    glVertex2f((float)(w - 220), 35); glVertex2f(0, 35);
     glEnd();
-
-    hud_draw_text(15, 12, "Click a country | Scroll to zoom | Drag to rotate | ESC to return",
+    hud_draw_text(15, 12, "Scroll to zoom | Drag to rotate | ESC to return",
                   gray, GLUT_BITMAP_HELVETICA_10);
 
-    /* Hover tooltip */
-    if (wm->hoveredCountry >= 0 && wm->hoveredCountry < wm->countryCount) {
-        Country* c = &wm->countries[wm->hoveredCountry];
-        float tx = (float)wm->mouseX + 15.0f;
-        float ty = (float)(h - wm->mouseY) + 15.0f;
-        float tw = 180, th = 50;
-        char buf[64];
+    /* ── SIDEBAR ─────────────────────────────────────────────────── */
+    {
+        int i;
+        int sideW = 220;
+        float sx    = (float)(w - sideW);
+        float sw    = (float)sideW;
+        float rowH  = 30.0f;
+        float hdrH  = 44.0f;
+        float topY  = (float)h;
 
-        if (tx + tw > w) tx = (float)w - tw - 10;
-        if (ty + th > h) ty = (float)h - th - 10;
-
-        /* Tooltip background */
-        glColor4f(0.06f, 0.08f, 0.12f, 0.9f);
+        /* Background */
+        glColor4f(0.04f, 0.05f, 0.10f, 0.97f);
         glBegin(GL_QUADS);
-        glVertex2f(tx, ty); glVertex2f(tx+tw, ty);
-        glVertex2f(tx+tw, ty+th); glVertex2f(tx, ty+th);
-        glEnd();
-        glColor4f(0.3f, 0.5f, 1.0f, 0.5f);
-        glBegin(GL_LINE_LOOP);
-        glVertex2f(tx, ty); glVertex2f(tx+tw, ty);
-        glVertex2f(tx+tw, ty+th); glVertex2f(tx, ty+th);
+        glVertex2f(sx, 0);    glVertex2f(sx + sw, 0);
+        glVertex2f(sx + sw, topY); glVertex2f(sx, topY);
         glEnd();
 
-        hud_draw_text(tx+8, ty+th-18, c->name, white, GLUT_BITMAP_HELVETICA_12);
-        snprintf(buf, 64, "Infection: %.0f%%", c->infectionLevel * 100.0f);
-        hud_draw_text(tx+8, ty+8, buf, gray, GLUT_BITMAP_HELVETICA_10);
+        /* Left accent border */
+        glColor4f(0.28f, 0.48f, 1.0f, 0.9f);
+        glLineWidth(2.0f);
+        glBegin(GL_LINES);
+        glVertex2f(sx, 0); glVertex2f(sx, topY);
+        glEnd();
+        glLineWidth(1.0f);
+
+        /* Header strip */
+        glColor4f(0.09f, 0.12f, 0.22f, 1.0f);
+        glBegin(GL_QUADS);
+        glVertex2f(sx, topY - hdrH);  glVertex2f(sx + sw, topY - hdrH);
+        glVertex2f(sx + sw, topY);    glVertex2f(sx, topY);
+        glEnd();
+        {
+            Color4f accent = {0.55f, 0.78f, 1.0f, 1.0f};
+            hud_draw_text(sx + 12, topY - 24, "COUNTRIES", accent, GLUT_BITMAP_HELVETICA_12);
+            hud_draw_text(sx + 12, topY - 38, "Click a name to select", gray, GLUT_BITMAP_HELVETICA_10);
+        }
+
+        /* Country rows */
+        for (i = 0; i < wm->countryCount; i++) {
+            Country* c = &wm->countries[i];
+            float rowY = topY - hdrH - (float)(i + 1) * rowH;
+            if (rowY < 36.0f) break;  /* stop before bottom bar */
+
+            int isSelected = (i == wm->selectedCountry);
+            float inf = c->infectionLevel;
+
+            /* Row bg */
+            if (isSelected)
+                glColor4f(0.15f, 0.30f, 0.65f, 0.98f);
+            else
+                glColor4f(i % 2 == 0 ? 0.06f : 0.08f,
+                          i % 2 == 0 ? 0.07f : 0.09f,
+                          i % 2 == 0 ? 0.12f : 0.14f, 0.95f);
+            glBegin(GL_QUADS);
+            glVertex2f(sx + 2, rowY);
+            glVertex2f(sx + sw - 2, rowY);
+            glVertex2f(sx + sw - 2, rowY + rowH - 1);
+            glVertex2f(sx + 2, rowY + rowH - 1);
+            glEnd();
+
+            /* Thin infection bar at bottom of row */
+            if (inf > 0.001f) {
+                float bw = (sw - 4) * inf;
+                glColor4f(0.9f, 0.3f + 0.3f*(1-inf), 0.1f, 0.7f);
+                glBegin(GL_QUADS);
+                glVertex2f(sx + 2, rowY);
+                glVertex2f(sx + 2 + bw, rowY);
+                glVertex2f(sx + 2 + bw, rowY + 4);
+                glVertex2f(sx + 2, rowY + 4);
+                glEnd();
+            }
+
+            /* Country name text */
+            {
+                Color4f nc = isSelected
+                    ? (Color4f){1.0f, 1.0f, 1.0f, 1.0f}
+                    : (inf > 0.25f
+                        ? (Color4f){1.0f, 0.55f + 0.35f*(1-inf), 0.25f, 1.0f}
+                        : (Color4f){0.80f, 0.84f, 0.94f, 1.0f});
+                hud_draw_text(sx + 10, rowY + 9, c->name, nc, GLUT_BITMAP_HELVETICA_12);
+            }
+
+            /* Infection pct badge on right */
+            if (inf > 0.001f) {
+                char pct[10];
+                snprintf(pct, sizeof(pct), "%.0f%%", inf * 100.0f);
+                Color4f rc = {1.0f, 0.45f, 0.2f, 1.0f};
+                hud_draw_text(sx + sw - 36, rowY + 9, pct, rc, GLUT_BITMAP_HELVETICA_10);
+            }
+
+            /* Selected outline */
+            if (isSelected) {
+                glColor4f(0.45f, 0.72f, 1.0f, 0.95f);
+                glLineWidth(1.5f);
+                glBegin(GL_LINE_LOOP);
+                glVertex2f(sx + 2, rowY);
+                glVertex2f(sx + sw - 2, rowY);
+                glVertex2f(sx + sw - 2, rowY + rowH - 1);
+                glVertex2f(sx + 2, rowY + rowH - 1);
+                glEnd();
+                glLineWidth(1.0f);
+            }
+        }
     }
 
     (void)gameTime;
@@ -693,10 +823,9 @@ void render_world_map(GameWorld* world) {
     /* Routes */
     draw_routes(wm, gt);
 
-    /* Country labels */
-    draw_country_labels(wm);
+    /* Country labels removed from globe -- shown in sidebar instead */
 
-    /* 2D HUD overlay */
+    /* 2D HUD overlay + sidebar */
     draw_globe_hud(wm, gt);
 }
 
@@ -858,14 +987,36 @@ void render_virus_select(GameWorld* world) {
    INTERACTION
    ═══════════════════════════════════════════ */
 
+/* Helper: given screen pixel (mx, my), return the sidebar country index or -1.
+   Constants must match draw_globe_hud sidebar section exactly. */
+static int sidebar_hit(WorldMapState* wm, int mx, int my) {
+    int w  = glutGet(GLUT_WINDOW_WIDTH);
+    int h  = glutGet(GLUT_WINDOW_HEIGHT);
+    float sx   = (float)(w - 220);
+    float rowH = 30.0f;    /* must match draw code */
+    float hdrH = 44.0f;   /* must match draw code */
+    float topY = (float)h;
+    int   glY  = h - my;  /* window Y → ortho Y (0=bottom) */
+
+    if ((float)mx < sx) return -1;  /* left of sidebar */
+
+    int i;
+    for (i = 0; i < wm->countryCount; i++) {
+        float rowY = topY - hdrH - (float)(i + 1) * rowH;
+        if (rowY < 36.0f) break;
+        if ((float)glY >= rowY && (float)glY < rowY + rowH)
+            return i;
+    }
+    return -1;
+}
+
 int world_map_click(GameWorld* world, int mouseX, int mouseY) {
     WorldMapState* wm = &world->worldMap;
 
-    /* Need to set up the globe camera matrices for hit testing */
-    setup_globe_camera(wm);
-    int idx = globe_hit_test(wm, mouseX, mouseY);
-    if (idx >= 0) {
-        wm->selectedCountry = idx;
+    /* Sidebar only -- clicking the globe no longer selects countries */
+    int sidebarIdx = sidebar_hit(wm, mouseX, mouseY);
+    if (sidebarIdx >= 0) {
+        wm->selectedCountry = sidebarIdx;
         wm->hoveredVirus = -1;
         return 1;
     }
@@ -897,13 +1048,11 @@ int virus_select_click(GameWorld* world, int mouseX, int mouseY) {
 
 void world_map_passive_motion(GameWorld* world, int x, int y) {
     WorldMapState* wm = &world->worldMap;
+    /* Only track mouse position; no hover highlighting */
     wm->mouseX = x;
     wm->mouseY = y;
 
-    if (world->appState == APP_WORLD_MAP) {
-        setup_globe_camera(wm);
-        wm->hoveredCountry = globe_hit_test(wm, x, y);
-    } else if (world->appState == APP_VIRUS_SELECT) {
+    if (world->appState == APP_VIRUS_SELECT) {
         int w = glutGet(GLUT_WINDOW_WIDTH);
         int h = glutGet(GLUT_WINDOW_HEIGHT);
         int glY = h - y;
@@ -938,9 +1087,11 @@ void world_map_drag(GameWorld* world, int x, int y) {
     if (wm->dragActive) {
         float dx = (float)(x - wm->lastMouseX);
         float dy = (float)(y - wm->lastMouseY);
-        wm->globeAzimuth -= dx * 0.4f;
+        /* drag right -> globe surface moves right -> azimuth decreases */
+        wm->globeAzimuth   -= dx * 0.4f;
+        /* drag down  -> globe surface moves down  -> elevation increases */
         wm->globeElevation += dy * 0.3f;
-        if (wm->globeElevation > 80.0f) wm->globeElevation = 80.0f;
+        if (wm->globeElevation >  80.0f) wm->globeElevation =  80.0f;
         if (wm->globeElevation < -80.0f) wm->globeElevation = -80.0f;
         wm->lastMouseX = x;
         wm->lastMouseY = y;

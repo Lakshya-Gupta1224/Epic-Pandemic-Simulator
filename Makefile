@@ -26,7 +26,8 @@ FRONTEND_SRC = src/frontend/renderer.c \
                src/frontend/entity_renderer.c \
                src/frontend/hud.c \
                src/frontend/menu.c \
-               src/frontend/input.c
+               src/frontend/input.c \
+               src/frontend/world_map.c
 
 CONTROLLER_SRC = src/controller/controller.c \
                  src/controller/world_gen.c

@@ -424,7 +424,8 @@ void render_hud(const GameWorld* world) {
                  0.85f, 0.75f, 0.20f, "Mental Health", world->gameTime);
     by -= barH + gap;
 
-    float currentPop = world->config.population - (float)s->dead;
+    /* Alive = sum of all living compartments (exact, no rounding drift) */
+    float currentPop = (float)(s->susceptible + s->exposed + s->infected + s->recovered);
     hud_draw_bar(bx, by, barW, barH,
                  currentPop, world->config.population,
                  0.4f, 0.6f, 0.9f, "Population", world->gameTime);
@@ -434,20 +435,25 @@ void render_hud(const GameWorld* world) {
                    world->config.population, world->config.maxHospitalBeds, world->config.maxDays);
 
     /* ─── Decision Panel (right side, with panel background) ─── */
+    /* panelTop must be below the 4 resource bars.
+       Bars start at screenH-30 and occupy 4*(barH+gap)=4*(20+7)=108px.
+       So bars end at screenH-138; we add 17px clearance -> screenH-155. */
     {
         float panelW = 220;
-        float panelH = 590;
+        float panelH = 510;
         float px = (float)screenW - panelW - 10;
-        float panelTop = (float)screenH - 105;
-        float py = panelTop;
+        float panelTop = (float)screenH - 155;
+        /* py starts 14px below panelTop so the CONTROLS text baseline+ascent
+           sits fully inside the box (box top is panelTop+18). */
+        float py = panelTop - 14;
 
         /* Panel background */
         glColor4f(0.04f, 0.04f, 0.06f, 0.70f);
         glBegin(GL_QUADS);
         glVertex2f(px - 8, panelTop - panelH);
         glVertex2f((float)screenW, panelTop - panelH);
-        glVertex2f((float)screenW, panelTop + 5);
-        glVertex2f(px - 8, panelTop + 5);
+        glVertex2f((float)screenW, panelTop + 18);   /* box top: 18px above panelTop */
+        glVertex2f(px - 8, panelTop + 18);
         glEnd();
 
         /* Panel border */
@@ -455,8 +461,8 @@ void render_hud(const GameWorld* world) {
         glBegin(GL_LINE_LOOP);
         glVertex2f(px - 8, panelTop - panelH);
         glVertex2f((float)screenW - 2, panelTop - panelH);
-        glVertex2f((float)screenW - 2, panelTop + 5);
-        glVertex2f(px - 8, panelTop + 5);
+        glVertex2f((float)screenW - 2, panelTop + 18);
+        glVertex2f(px - 8, panelTop + 18);
         glEnd();
 
         hud_draw_text(px + panelW/2 - 42, py, "CONTROLS", white, GLUT_BITMAP_HELVETICA_12);

@@ -28,7 +28,7 @@
 #define PERSONS_PER_HOUSE       2       /* 1 child + 1 adult */
 
 /* ─── Globe / World Map ─── */
-#define MAX_COUNTRIES   15
+#define MAX_COUNTRIES   20
 #define MAX_CITIES      30
 #define MAX_ROUTES      20
 #define GLOBE_RADIUS    80.0f

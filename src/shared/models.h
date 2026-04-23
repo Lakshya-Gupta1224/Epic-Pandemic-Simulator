@@ -56,11 +56,12 @@ typedef enum {
 } RouteType;
 
 typedef enum {
-    END_NONE            = -1,
-    END_PANDEMIC_OVER   =  0,
-    END_BUDGET_DEPLETED =  1,
-    END_MAX_DAYS        =  2,
-    END_MENTAL_CRISIS   =  3
+    END_NONE               = -1,
+    END_PANDEMIC_OVER      =  0,
+    END_BUDGET_DEPLETED    =  1,
+    END_MAX_DAYS           =  2,
+    END_MENTAL_CRISIS      =  3,
+    END_HOSPITAL_COLLAPSE  =  4   /* hospital at max for 10 consecutive days */
 } EndCondition;
 
 /* ═══════════════════════════════════════════
@@ -184,6 +185,9 @@ typedef struct {
     /* Movement scheduling */
     float movementTimer;
 
+    /* Hospital overwhelm tracking (10 consecutive days = system failure) */
+    int   hospitalOverwhelmedDays;
+
     /* End state */
     EndCondition endCondition;
 
@@ -242,6 +246,8 @@ typedef struct {
 typedef struct {
     char  name[32];
     float lat, lon;
+    float minLat, maxLat;
+    float minLon, maxLon;
     float infectionLevel;
     int   selected;
     void* savedState;

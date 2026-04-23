@@ -47,7 +47,7 @@ make
 Run this one-liner that does the same thing as the Makefile:
 powershell 
 
-gcc -Wall -Wextra -std=c99 -Isrc -Isrc/shared -Isrc/backend -Isrc/frontend -Isrc/controller src/main.c src/shared/texture_loader.c src/backend/seir.c src/backend/timer.c src/backend/economy.c src/backend/mental_health.c src/backend/hospital.c src/backend/decisions.c src/backend/end_conditions.c src/backend/debriefing.c src/backend/simulation.c src/frontend/renderer.c src/frontend/camera.c src/frontend/world_map.c src/frontend/city_renderer.c src/frontend/entity_renderer.c src/frontend/hud.c src/frontend/menu.c src/frontend/input.c src/controller/controller.c src/controller/world_gen.c src/frontend/obj_loader.c -o pandemic_sim -lfreeglut -lopengl32 -lglu32 -lm
+gcc -Wall -Wextra -std=c99 -Isrc -Isrc/shared -Isrc/backend -Isrc/frontend -Isrc/controller src/main.c src/shared/texture_loader.c src/backend/seir.c src/backend/timer.c src/backend/economy.c src/backend/mental_health.c src/backend/hospital.c src/backend/decisions.c src/backend/end_conditions.c src/backend/debriefing.c src/backend/simulation.c src/frontend/renderer.c src/frontend/camera.c src/frontend/world_map.c src/frontend/city_renderer.c src/frontend/entity_renderer.c src/frontend/hud.c src/frontend/menu.c src/frontend/input.c src/controller/controller.c src/controller/world_gen.c -o pandemic_sim -lfreeglut -lopengl32 -lglu32 -lm
 ```
 
 ### Run

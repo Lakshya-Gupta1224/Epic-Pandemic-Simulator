@@ -142,9 +142,10 @@ void sim_init(GameWorld* world, SimConfig config) {
     world->state.lockdownPercent    = 0.0f;
     world->state.populationDensity  = 1.0f;
     world->state.infectionRate      = config.R0;
-    world->state.movementTimer      = 0.0f;
-    world->state.endCondition       = END_NONE;
-    world->state.timeScale          = 1.0f;
+    world->state.movementTimer          = 0.0f;
+    world->state.endCondition           = END_NONE;
+    world->state.hospitalOverwhelmedDays = 0;
+    world->state.timeScale              = 1.0f;
 }
 
 static void update_vehicles(GameWorld* world, float dt) {
@@ -198,7 +199,7 @@ int sim_update(GameWorld* world, float deltaTime) {
     if (flags & 2) {  /* DAY_PASSED */
         seir_step(&world->state, &world->config);
         economy_update(&world->state);
-        mental_health_update(&world->state, &world->config);
+        /* mental_health_update is called inside seir_step once per day */
         hospital_update_persons(world);
         debriefing_gather(&world->stats, &world->state, &world->config);
 
@@ -262,7 +263,7 @@ void sim_skip_days(GameWorld* world, int days) {
         if (world->state.endCondition != END_NONE) break;
         seir_step(&world->state, &world->config);
         economy_update(&world->state);
-        mental_health_update(&world->state, &world->config);
+        /* mental_health_update is called inside seir_step once per day */
         hospital_update_persons(world);
         debriefing_gather(&world->stats, &world->state, &world->config);
         world->state.currentDay++;
