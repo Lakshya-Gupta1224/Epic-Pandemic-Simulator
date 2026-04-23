@@ -396,14 +396,21 @@ void render_hud(const GameWorld* world) {
     /* Bars panel background */
     glColor4f(0.04f, 0.04f, 0.06f, 0.65f);
     glBegin(GL_QUADS);
-    glVertex2f(bx - 8, by - (barH + gap) * 3 + 5);
-    glVertex2f((float)screenW, by - (barH + gap) * 3 + 5);
+    glVertex2f(bx - 8, by - (barH + gap) * 4 + 5);
+    glVertex2f((float)screenW, by - (barH + gap) * 4 + 5);
     glVertex2f((float)screenW, (float)screenH);
     glVertex2f(bx - 8, (float)screenH);
     glEnd();
 
+    int actualHospitalOccupancy = 0;
+    for (g = 0; g < world->buildingCount; g++) {
+        if (world->buildings[g].type == BUILDING_HOSPITAL) {
+            actualHospitalOccupancy += world->buildings[g].currCapacity;
+        }
+    }
+
     hud_draw_bar(bx, by, barW, barH,
-                 (float)s->infected, (float)world->config.maxHospitalBeds,
+                 (float)actualHospitalOccupancy, (float)world->config.maxHospitalBeds,
                  0.9f, 0.25f, 0.25f, "Hospital", world->gameTime);
     by -= barH + gap;
 
@@ -415,6 +422,12 @@ void render_hud(const GameWorld* world) {
     hud_draw_bar(bx, by, barW, barH,
                  s->mentalHealth, world->config.maxMentalHealth,
                  0.85f, 0.75f, 0.20f, "Mental Health", world->gameTime);
+    by -= barH + gap;
+
+    float currentPop = world->config.population - (float)s->dead;
+    hud_draw_bar(bx, by, barW, barH,
+                 currentPop, world->config.population,
+                 0.4f, 0.6f, 0.9f, "Population", world->gameTime);
 
     /* ─── SEIR Graph (bottom-left) ─── */
     hud_draw_graph(15, 15, 380, 180, s,

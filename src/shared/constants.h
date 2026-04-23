@@ -18,7 +18,7 @@
 #define DEFAULT_R0                2.5f
 #define DEFAULT_INITIAL_EXPOSED   30
 #define DEFAULT_MAX_DAYS          365
-#define DEFAULT_HOSPITAL_BEDS     800
+#define DEFAULT_HOSPITAL_BEDS     150
 #define DEFAULT_MAX_ECONOMY       50000
 #define DEFAULT_MAX_MENTAL_HEALTH 100.0f
 

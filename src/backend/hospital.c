@@ -37,15 +37,38 @@ void hospital_update_persons(GameWorld* world) {
         for (i = 0; i < world->personCount && needI > 0; i++) {
             if (world->persons[i].state == STATE_EXPOSED) {
                 world->persons[i].state = STATE_INFECTED;
-                /* Move to hospital */
-                world->persons[i].currentPlace = PLACE_HOSPITAL;
                 Building* hosp = &world->buildings[world->persons[i].hospitalId];
-                world->persons[i].startPosition = world->persons[i].position;
-                world->persons[i].targetPosition = hosp->position;
-                world->persons[i].targetPosition.y = (world->persons[i].type == PERSON_CHILD)
-                    ? CHILD_RADIUS : ADULT_RADIUS;
-                world->persons[i].moveProgress = 0.0f;
-                world->persons[i].isMoving = 1;
+                if (hosp->currCapacity < hosp->maxCapacity) {
+                    hosp->currCapacity++;
+                    world->persons[i].currentPlace = PLACE_HOSPITAL;
+                    world->persons[i].startPosition = world->persons[i].position;
+                    world->persons[i].targetPosition = hosp->position;
+                    world->persons[i].targetPosition.y = (world->persons[i].type == PERSON_CHILD)
+                        ? CHILD_RADIUS : ADULT_RADIUS;
+                    world->persons[i].moveProgress = 0.0f;
+                    world->persons[i].isMoving = 1;
+                } else {
+                    int foundAlt = 0;
+                    for (int b = 0; b < world->buildingCount; b++) {
+                        if (world->buildings[b].type == BUILDING_HOSPITAL && world->buildings[b].currCapacity < world->buildings[b].maxCapacity) {
+                            world->persons[i].hospitalId = b;
+                            hosp = &world->buildings[b];
+                            hosp->currCapacity++;
+                            world->persons[i].currentPlace = PLACE_HOSPITAL;
+                            world->persons[i].startPosition = world->persons[i].position;
+                            world->persons[i].targetPosition = hosp->position;
+                            world->persons[i].targetPosition.y = (world->persons[i].type == PERSON_CHILD)
+                                ? CHILD_RADIUS : ADULT_RADIUS;
+                            world->persons[i].moveProgress = 0.0f;
+                            world->persons[i].isMoving = 1;
+                            foundAlt = 1;
+                            break;
+                        }
+                    }
+                    if (!foundAlt) {
+                        world->persons[i].currentPlace = PLACE_HOME;
+                    }
+                }
                 needI--;
             }
         }
@@ -57,6 +80,10 @@ void hospital_update_persons(GameWorld* world) {
         for (i = 0; i < world->personCount && needR > 0; i++) {
             if (world->persons[i].state == STATE_INFECTED) {
                 world->persons[i].state = STATE_RECOVERED;
+                if (world->persons[i].currentPlace == PLACE_HOSPITAL) {
+                    Building* hosp = &world->buildings[world->persons[i].hospitalId];
+                    if (hosp->currCapacity > 0) hosp->currCapacity--;
+                }
                 /* Move back home */
                 world->persons[i].currentPlace = PLACE_HOME;
                 Building* home = &world->buildings[world->persons[i].homeId];
@@ -77,6 +104,10 @@ void hospital_update_persons(GameWorld* world) {
         for (i = 0; i < world->personCount && needD > 0; i++) {
             if (world->persons[i].state == STATE_INFECTED) {
                 world->persons[i].state = STATE_DEAD;
+                if (world->persons[i].currentPlace == PLACE_HOSPITAL) {
+                    Building* hosp = &world->buildings[world->persons[i].hospitalId];
+                    if (hosp->currCapacity > 0) hosp->currCapacity--;
+                }
                 world->persons[i].currentPlace = PLACE_ASCENDED;
                 /* Death animation: float upward */
                 world->persons[i].startPosition = world->persons[i].position;
@@ -85,6 +116,39 @@ void hospital_update_persons(GameWorld* world) {
                 world->persons[i].moveProgress = 0.0f;
                 world->persons[i].isMoving = 1;
                 needD--;
+            }
+        }
+    }
+
+    /* Backfill empty hospital beds with home-quarantined infected */
+    for (i = 0; i < world->personCount; i++) {
+        if (world->persons[i].state == STATE_INFECTED && world->persons[i].currentPlace == PLACE_HOME) {
+            Building* hosp = &world->buildings[world->persons[i].hospitalId];
+            if (hosp->currCapacity < hosp->maxCapacity) {
+                hosp->currCapacity++;
+                world->persons[i].currentPlace = PLACE_HOSPITAL;
+                world->persons[i].startPosition = world->persons[i].position;
+                world->persons[i].targetPosition = hosp->position;
+                world->persons[i].targetPosition.y = (world->persons[i].type == PERSON_CHILD)
+                    ? CHILD_RADIUS : ADULT_RADIUS;
+                world->persons[i].moveProgress = 0.0f;
+                world->persons[i].isMoving = 1;
+            } else {
+                for (int b = 0; b < world->buildingCount; b++) {
+                    if (world->buildings[b].type == BUILDING_HOSPITAL && world->buildings[b].currCapacity < world->buildings[b].maxCapacity) {
+                        world->persons[i].hospitalId = b;
+                        hosp = &world->buildings[b];
+                        hosp->currCapacity++;
+                        world->persons[i].currentPlace = PLACE_HOSPITAL;
+                        world->persons[i].startPosition = world->persons[i].position;
+                        world->persons[i].targetPosition = hosp->position;
+                        world->persons[i].targetPosition.y = (world->persons[i].type == PERSON_CHILD)
+                            ? CHILD_RADIUS : ADULT_RADIUS;
+                        world->persons[i].moveProgress = 0.0f;
+                        world->persons[i].isMoving = 1;
+                        break;
+                    }
+                }
             }
         }
     }

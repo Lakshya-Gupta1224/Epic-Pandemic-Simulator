@@ -53,7 +53,8 @@ void world_generate(GameWorld* world) {
             hosp->position.x = reg->center.x - halfW + stepX * 4.5f;
             hosp->position.y = 0.0f;
             hosp->position.z = reg->center.z - halfD + stepZ * 0.5f;
-            hosp->maxCapacity = world->config.maxHospitalBeds;
+            hosp->maxCapacity = world->config.maxHospitalBeds / NUM_REGIONS;
+            if (hosp->maxCapacity < 1) hosp->maxCapacity = 1;
             hosp->currCapacity = 0;
             hosp->residentCount = 0;
             reg->hospitalId = bIdx;

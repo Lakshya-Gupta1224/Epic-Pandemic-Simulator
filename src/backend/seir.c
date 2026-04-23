@@ -40,24 +40,34 @@ void seir_step(SimState* state, SimConfig* config) {
     float prev_I = state->I;
     float prev_R = state->R;
 
+    float beds_ratio = ((float)config->maxHospitalBeds / config->population);
+    
+    float I_with_bed = prev_I;
+    float I_no_bed = 0.0f;
+    if (prev_I > beds_ratio) {
+        I_with_bed = beds_ratio;
+        I_no_bed = prev_I - beds_ratio;
+    }
+
     float baseMortalityRate = 0.05f;
+    float no_bed_mortality = 0.30f; // Higher mortality if no hospital bed available
 
     /* SEIR Differential Equations (Euler method) */
     float infection_force = state->rho * state->beta * prev_S * prev_I;
 
+    float deaths_with_bed = (baseMortalityRate * state->gamma * I_with_bed) * dt;
+    float deaths_no_bed = (no_bed_mortality * state->gamma * I_no_bed) * dt;
+    float new_deaths_prop = deaths_with_bed + deaths_no_bed;
+
+    float recovers_with_bed = ((1.0f - baseMortalityRate) * state->gamma * I_with_bed) * dt;
+    float recovers_no_bed = ((1.0f - no_bed_mortality) * state->gamma * I_no_bed) * dt;
+    float new_recovers_prop = recovers_with_bed + recovers_no_bed;
+
     float next_S = prev_S - infection_force * dt;
     float next_E = prev_E + (infection_force - state->alpha * prev_E) * dt;
-    float next_I = prev_I + (state->alpha * prev_E - state->gamma * prev_I) * dt;
-    float next_R = prev_R + ((1.0f - baseMortalityRate) * state->gamma * prev_I) * dt;
-    float next_D = state->D + (baseMortalityRate * state->gamma * prev_I) * dt;
-
-    /* Hospital overflow deaths tracking */
-    int newInfectedRaw = (int)roundf(next_I * config->population);
-    if (newInfectedRaw > config->maxHospitalBeds) {
-        float overflow_prop = (float)(newInfectedRaw - config->maxHospitalBeds) / config->population;
-        next_D += overflow_prop;
-        next_I -= overflow_prop;
-    }
+    float next_I = prev_I + (state->alpha * prev_E) * dt - (new_deaths_prop + new_recovers_prop);
+    float next_R = prev_R + new_recovers_prop;
+    float next_D = state->D + new_deaths_prop;
 
     /* Clamp to valid range */
     if (next_S < 0.0f) next_S = 0.0f;
@@ -81,16 +91,14 @@ void seir_step(SimState* state, SimConfig* config) {
 
     state->dead = (int)roundf(state->D * config->population);
     
-    if (newInfectedRaw > config->maxHospitalBeds) {
-        state->infected = config->maxHospitalBeds;
-    } else {
-        state->infected = (int)roundf(next_I * config->population);
-    }
+    state->infected = (int)roundf(next_I * config->population);
 
     /* Apply death-based mental health degradation */
     int newDeaths = state->dead - prevDead;
     if (newDeaths > 0) {
-        state->mentalHealthBase -= (float)newDeaths;
+        float timeFactor = 1.0f + 3.0f * ((float)state->currentDay / (float)config->maxDays);
+        float severityFactor = 100.0f / (float)config->population; // Normalize for pop size
+        state->mentalHealthBase -= ((float)newDeaths * severityFactor * 0.2f) * timeFactor;
     }
 
     /* Record history */
